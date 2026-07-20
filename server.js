@@ -17,30 +17,19 @@ let adminSessions = new Set();
 let socketsByUserId = {}; // userId -> socket.id
 let pendingDisconnects = {}; // userId -> { timer, roomId }  (reconnect grace period)
 
-// Fix (updates not showing up): browsers/WebViews aggressively cache static
-// .html files by default, so after replacing a file like
-// public/foodwheel/index.html the old cached copy can keep loading instead
-// of the new one — looking exactly like the fix "didn't apply" even though
-// the file on disk is correct. HTML is now served with no-cache so every
-// load always re-fetches the current file; JS/CSS/images still cache
-// normally since Express's defaults are fine for those.
-const staticNoCacheHtml = { setHeaders: (res, filePath) => {
-    if (filePath.endsWith(".html")) res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-} };
 app.use(cors());
 app.use(express.json());
-app.use(express.static("public", staticNoCacheHtml));
-app.use("/admin", express.static("admin", staticNoCacheHtml));
+app.use(express.static("public"));
+app.use("/admin", express.static("admin"));
 
 // ---------- Folders ----------
 const DATA_FOLDER = path.join(__dirname, "data");
 const MUSIC_FOLDER = path.join(__dirname, "uploads/music");
 const PHOTO_FOLDER = path.join(__dirname, "uploads/photos");
 const BG_FOLDER = path.join(__dirname, "uploads/backgrounds");
-const LOGO_FOLDER = path.join(__dirname, "uploads/logos");
 const FRAME_FOLDER = path.join(__dirname, "uploads/frames");
 
-[DATA_FOLDER, MUSIC_FOLDER, PHOTO_FOLDER, BG_FOLDER, FRAME_FOLDER, LOGO_FOLDER].forEach((dir) => {
+[DATA_FOLDER, MUSIC_FOLDER, PHOTO_FOLDER, BG_FOLDER, FRAME_FOLDER].forEach((dir) => {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
@@ -48,7 +37,6 @@ app.use("/music", express.static(MUSIC_FOLDER));
 app.use("/photos", express.static(PHOTO_FOLDER));
 app.use("/backgrounds", express.static(BG_FOLDER));
 app.use("/frames", express.static(FRAME_FOLDER));
-app.use("/logos", express.static(LOGO_FOLDER));
 
 // ---------- File Upload Config ----------
 const musicStorage = multer.diskStorage({
@@ -74,12 +62,6 @@ const frameStorage = multer.diskStorage({
     filename: (req, file, cb) => cb(null, Date.now() + "-" + file.originalname)
 });
 const uploadFrame = multer({ storage: frameStorage });
-
-const logoStorage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, LOGO_FOLDER),
-    filename: (req, file, cb) => cb(null, Date.now() + "-" + file.originalname)
-});
-const uploadLogo = multer({ storage: logoStorage });
 
 // ---------- Data Files ----------
 const USERS_FILE = path.join(DATA_FOLDER, "users.json");
@@ -120,9 +102,7 @@ function saveRoomsToDisk() {
             hostName: r.hostName,
             adminIds: r.adminIds || [],
             background: r.background || null,
-            logo: r.logo || null,
-            agencyId: r.agencyId || null,
-            gameEnabled: r.gameEnabled !== false
+            agencyId: r.agencyId || null
         };
     });
     safeWrite(ROOMS_FILE, persistable);
@@ -167,13 +147,11 @@ function conversationKey(a, b) { return [a, b].sort().join("_"); }
 
 // ---------- Gift Catalog ----------
 const GIFT_CATALOG = [
-    { id: "rose", name: "Rose", emoji: "🌹", price: 10, tier: "normal" },
-    { id: "heart", name: "Heart", emoji: "❤️", price: 20, tier: "normal" },
-    { id: "crown", name: "Crown", emoji: "👑", price: 100, tier: "vip" },
-    { id: "car", name: "Sports Car", emoji: "🏎️", price: 500, tier: "vip" },
-    { id: "rocket", name: "Rocket", emoji: "🚀", price: 1000, tier: "legend" },
-    { id: "ring", name: "Diamond Ring", emoji: "💍", price: 300, tier: "vip" },
-    { id: "phoenix", name: "Legend Phoenix", emoji: "🔥", price: 2000, tier: "legend" }
+    { id: "rose", name: "Rose", emoji: "🌹", price: 10 },
+    { id: "heart", name: "Heart", emoji: "❤️", price: 20 },
+    { id: "crown", name: "Crown", emoji: "👑", price: 100 },
+    { id: "car", name: "Sports Car", emoji: "🏎️", price: 500 },
+    { id: "rocket", name: "Rocket", emoji: "🚀", price: 1000 }
 ];
 
 function levelFromCoins(coins) {
@@ -288,23 +266,6 @@ function applyChestReward(userId, reward) {
         logTransaction(userId, "diamonds", reward.amount, "Treasure Chest reward");
     }
     saveUsers();
-}
-
-// Push the user's current coins/diamonds/level/vipLevel to their own socket
-// only (never broadcast to the room) — this is what makes every wallet-
-// touching action (gifts, chest rewards, admin edits, exchanges) show up
-// instantly everywhere the balance is displayed, with no refresh needed.
-function pushWalletUpdate(userId) {
-    const found = findUserByUserId(userId);
-    if (!found) return;
-    const sid = socketsByUserId[userId];
-    if (!sid) return;
-    io.to(sid).emit("wallet-update", {
-        coins: found.user.coins,
-        diamonds: found.user.diamonds,
-        level: found.user.level,
-        vipLevel: found.user.vipLevel
-    });
 }
 
 app.get("/api/chest/config", (req, res) => {
@@ -601,7 +562,6 @@ let rooms = {};
             hostName: m.hostName,
             adminIds: m.adminIds || [],
             background: m.background || null,
-            logo: m.logo || null,
             agencyId: m.agencyId || null,
             seats: Array(8).fill(null),
             onlineUsers: [],
@@ -609,7 +569,6 @@ let rooms = {};
             music: { url: null, name: null, playing: false },
             lockedSeats: [],
             roomLocked: false,
-            gameEnabled: m.gameEnabled !== false,
             treasureChest: freshChestState(),
             createdAt: new Date().toISOString()
         };
@@ -617,23 +576,12 @@ let rooms = {};
 })();
 
 function publicRoom(room) {
-    const seats = room.seats.map((seat) => {
-        if (!seat) return null;
-        const found = findUserByUserId(seat.userId);
-        return {
-            ...seat,
-            role: roleForUser(room, seat.userId),
-            // Always read live from the user record so a frame/VIP change
-            // shows up on the seat instantly, without needing a manual sync call.
-            activeFrame: found ? found.user.activeFrame || null : (seat.activeFrame || null),
-            vipLevel: found ? (found.user.vipLevel || 0) : (seat.vipLevel || 0)
-        };
-    });
+    const seats = room.seats.map((seat) => seat ? { ...seat, role: roleForUser(room, seat.userId) } : null);
     return { ...room, seats };
 }
 function roomListPublic() {
     return Object.values(rooms)
-        .map((r) => ({ roomId: r.roomId, roomName: r.roomName, hostName: r.hostName, onlineCount: r.onlineUsers.length, roomLocked: !!r.roomLocked, logo: r.logo || null }))
+        .map((r) => ({ roomId: r.roomId, roomName: r.roomName, hostName: r.hostName, onlineCount: r.onlineUsers.length, roomLocked: !!r.roomLocked }))
         .sort((a, b) => b.onlineCount - a.onlineCount);
 }
 
@@ -650,8 +598,8 @@ app.post("/api/room/create", (req, res) => {
     const room = {
         roomId, roomName: roomName.trim(), hostId: userId, hostName: userName,
         adminIds: [], seats: Array(8).fill(null), onlineUsers: [], messages: [],
-        music: { url: null, name: null, playing: false }, background: null, logo: null, lockedSeats: [],
-        agencyId: null, roomLocked: false, gameEnabled: true, treasureChest: freshChestState(), createdAt: new Date().toISOString()
+        music: { url: null, name: null, playing: false }, background: null, lockedSeats: [],
+        agencyId: null, roomLocked: false, treasureChest: freshChestState(), createdAt: new Date().toISOString()
     };
     rooms[roomId] = room;
     saveRoomsToDisk();
@@ -671,12 +619,6 @@ app.post("/api/music/upload", upload.single("music"), (req, res) => {
 app.post("/api/room/background/upload", uploadBg.single("background"), (req, res) => {
     if (!req.file) return res.json({ success: false, message: "ফাইল পাওয়া যায়নি" });
     res.json({ success: true, url: "/backgrounds/" + req.file.filename });
-});
-
-// ---------- Room logo upload ----------
-app.post("/api/room/logo/upload", uploadLogo.single("logo"), (req, res) => {
-    if (!req.file) return res.json({ success: false, message: "ফাইল পাওয়া যায়নি" });
-    res.json({ success: true, url: "/logos/" + req.file.filename });
 });
 
 // ==================================================
@@ -953,7 +895,6 @@ app.post("/api/admin/users/:mobile/coins", requireAdmin, (req, res) => {
     u.level = levelFromCoins(u.coins);
     saveUsers();
     logTransaction(u.userId, "coins", diff, "Admin adjustment");
-    pushWalletUpdate(u.userId);
     res.json({ success: true });
 });
 app.delete("/api/admin/users/:mobile", requireAdmin, (req, res) => {
@@ -964,7 +905,7 @@ app.delete("/api/admin/users/:mobile", requireAdmin, (req, res) => {
 });
 
 app.get("/api/admin/rooms", requireAdmin, (req, res) => {
-    const list = Object.values(rooms).map((r) => ({ roomId: r.roomId, roomName: r.roomName, hostName: r.hostName, onlineCount: r.onlineUsers.length, roomLocked: !!r.roomLocked, gameEnabled: r.gameEnabled !== false }));
+    const list = Object.values(rooms).map((r) => ({ roomId: r.roomId, roomName: r.roomName, hostName: r.hostName, onlineCount: r.onlineUsers.length, roomLocked: !!r.roomLocked }));
     res.json({ success: true, rooms: list });
 });
 app.post("/api/admin/rooms/:roomId/lock", requireAdmin, (req, res) => {
@@ -972,17 +913,6 @@ app.post("/api/admin/rooms/:roomId/lock", requireAdmin, (req, res) => {
     if (!room) return res.json({ success: false, message: "পাওয়া যায়নি" });
     room.roomLocked = !!req.body.locked;
     res.json({ success: true });
-});
-app.post("/api/admin/rooms/:roomId/game", requireAdmin, (req, res) => {
-    const room = rooms[req.params.roomId];
-    if (!room) return res.json({ success: false, message: "পাওয়া যায়নি" });
-    room.gameEnabled = !!req.body.enabled;
-    saveRoomsToDisk();
-    // Push the change live so anyone already in the room sees the game
-    // button appear/disappear immediately, no refresh needed.
-    io.to(room.roomId).emit("room-state", publicRoom(room));
-    console.log(`🎮 Game ${room.gameEnabled ? "enabled" : "disabled"} for room "${room.roomName}" (by admin)`);
-    res.json({ success: true, gameEnabled: room.gameEnabled });
 });
 app.delete("/api/admin/rooms/:roomId", requireAdmin, (req, res) => {
     const room = rooms[req.params.roomId];
@@ -1017,7 +947,6 @@ app.post("/api/admin/exchanges/:id/decide", requireAdmin, (req, res) => {
         logTransaction(ex.userId, "diamonds", -ex.diamonds, "Exchange approved");
         logTransaction(ex.userId, "coins", coinsGained, "Exchange approved");
         ex.status = "approved";
-        pushWalletUpdate(ex.userId);
     } else {
         ex.status = "rejected";
     }
@@ -1084,12 +1013,11 @@ io.on("connection", (socket) => {
         if (!found) return;
         let oldSeatNumber = null;
         room.seats.forEach((s, i) => { if (s && s.userId === socket.userId) { oldSeatNumber = i + 1; room.seats[i] = null; } });
-        room.seats[seatNumber - 1] = { userId: found.user.userId, socketId: socket.id, userName: found.user.name, userPhoto: found.user.photo || "", activeFrame: found.user.activeFrame || null, vipLevel: found.user.vipLevel || 0 };
+        room.seats[seatNumber - 1] = { userId: found.user.userId, socketId: socket.id, userName: found.user.name, userPhoto: found.user.photo || "" };
         io.to(roomId).emit("seat-update", {
             action: "take", seatNumber, oldSeatNumber,
             userId: found.user.userId, socketId: socket.id,
             userName: found.user.name, userPhoto: found.user.photo || "",
-            activeFrame: found.user.activeFrame || null, vipLevel: found.user.vipLevel || 0,
             role: roleForUser(room, found.user.userId)
         });
     });
@@ -1121,8 +1049,6 @@ io.on("connection", (socket) => {
         targetFound.user.diamonds = (targetFound.user.diamonds || 0) + gift.price;
         targetFound.user.vipLevel = vipLevelFromDiamonds(targetFound.user.diamonds);
         saveUsers();
-        pushWalletUpdate(senderFound.user.userId);
-        pushWalletUpdate(targetFound.user.userId);
         logTransaction(senderFound.user.userId, "coins", -gift.price, `Sent ${gift.name} to ${targetFound.user.name}`);
         logTransaction(targetFound.user.userId, "diamonds", gift.price, `Received ${gift.name} from ${senderFound.user.name}`);
         logGift({ fromUserId: senderFound.user.userId, fromName: senderFound.user.name, toUserId: targetFound.user.userId, toName: targetFound.user.name, gift, roomId, time: new Date().toISOString() });
@@ -1134,9 +1060,8 @@ io.on("connection", (socket) => {
         if (opened) {
             opened.forEach((o) => {
                 const top = topChestContributors(room.treasureChest, 3);
-                const recipients = new Set([room.hostId, ...top.map((c) => c.userId)]);
-                recipients.forEach((uid) => applyChestReward(uid, o.reward));
-                recipients.forEach((uid) => pushWalletUpdate(uid));
+                applyChestReward(room.hostId, o.reward);
+                top.forEach((c) => applyChestReward(c.userId, o.reward));
                 io.to(roomId).emit("chest-opened", { level: o.level, reward: o.reward, topContributors: top });
             });
         }
@@ -1164,15 +1089,6 @@ io.on("connection", (socket) => {
         room.background = url;
         saveRoomsToDisk();
         io.to(roomId).emit("room-background-update", { url });
-    });
-
-    socket.on("update-room-logo", ({ roomId, url }) => {
-        const room = rooms[roomId];
-        if (!room || !isOwnerOrAdmin(room, socket.userId)) return;
-        room.logo = url;
-        saveRoomsToDisk();
-        io.to(roomId).emit("room-logo-update", { url });
-        io.emit("room-list", roomListPublic());
     });
 
     socket.on("clear-chat", ({ roomId }) => {
@@ -1216,32 +1132,22 @@ io.on("connection", (socket) => {
         io.to(roomId).emit("room-state", publicRoom(room));
     });
 
-    // ---- Seat-8 room games: sync client-side game balance back to the real wallet ----
-    // NOTE: both Food Wheel and Teen Patti resolve their bets in the browser, so this
-    // delta is client-reported. We clamp it to a sane range per sync so a single call
-    // can't mint unlimited coins; for a hardened production setup the bet/spin/hand
-    // outcome should be resolved server-side instead.
-    socket.on("game-wheel-sync", ({ roomId, balance, game }) => {
+    socket.on("game-dice-play", ({ roomId, stake, guess }) => {
         const found = findUserByUserId(socket.userId);
         if (!found) return;
-        balance = Math.max(0, Math.floor(Number(balance) || 0));
-        const before = found.user.coins;
-        const MAX_GAIN_PER_SYNC = 5000;
-        const delta = Math.min(Math.max(balance - before, -before), MAX_GAIN_PER_SYNC);
-        found.user.coins = before + delta;
+        stake = Number(stake); guess = Number(guess);
+        if (!stake || stake <= 0 || stake > 500 || found.user.coins < stake || guess < 1 || guess > 6) {
+            socket.emit("room-error", { message: "সঠিক বাজি দাও অথবা পর্যাপ্ত কয়েন নেই" });
+            return;
+        }
+        const roll = crypto.randomInt(1, 7);
+        const won = roll === guess;
+        found.user.coins -= stake;
+        if (won) { found.user.coins += stake * 5; logTransaction(found.user.userId, "coins", stake * 4, "Dice game win"); }
+        else { logTransaction(found.user.userId, "coins", -stake, "Dice game loss"); }
         found.user.level = levelFromCoins(found.user.coins);
-        if (delta !== 0) logTransaction(found.user.userId, "coins", delta, `${game || "Food Wheel"} game`);
         saveUsers();
-        socket.emit("game-wheel-sync-result", { coins: found.user.coins });
-    });
-
-    // ---- Room game sync: whoever opens/closes the Food Wheel / Teen Patti
-    // overlay broadcasts it to everyone else currently in the room, so it
-    // shows full-screen for all participants at the same time instead of
-    // being local to whoever tapped the button. ----
-    socket.on("game-toggle", ({ roomId, open, game }) => {
-        if (!socket.currentRoom || socket.currentRoom !== roomId || !socket.userId) return;
-        socket.to(roomId).emit("game-toggle", { open: !!open, game: game || null, userId: socket.userId });
+        socket.emit("game-dice-result", { won, roll, bet: stake, coins: found.user.coins });
     });
 
     // ---- Real-time voice activity relay (drives the speaking-ring UI) ----

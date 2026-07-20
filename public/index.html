@@ -2,7 +2,7 @@
 <html lang="bn">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>PingPong — Voice Rooms</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700;9..144,900&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -12,11 +12,6 @@
 
 <div id="toast" class="toast" role="alert" aria-live="assertive"></div>
 <div id="announce-banner" class="announce-banner hidden"></div>
-<div id="legend-gift-overlay" class="legend-gift-overlay hidden">
-  <div class="legend-burst-rays"></div>
-  <div id="legend-gift-emoji" class="legend-gift-emoji"></div>
-  <div id="legend-gift-text" class="legend-gift-text"></div>
-</div>
 
 <!-- ============ LOGIN ============ -->
 <section id="view-login" class="view active">
@@ -96,7 +91,6 @@
 <section id="view-room" class="view">
   <header class="room-topbar">
     <button id="btn-leave-room" class="icon-btn">←</button>
-    <img id="room-logo-display" class="room-logo-display hidden" alt="">
     <div class="room-title-block">
       <h2 id="room-name-display">Room</h2>
       <span id="room-host-display" class="sub"></span>
@@ -111,16 +105,6 @@
     <div class="stage-glow"></div>
     <div id="gift-fly-layer" class="gift-fly-layer"></div>
     <div id="seat-grid" class="seat-grid"></div>
-    <div id="room-tv-screen" class="room-tv-screen">
-      <button id="btn-room-tv-close" class="room-tv-close">✕</button>
-      <div class="room-tv-tabs">
-        <button class="room-tv-tab active" data-game="foodwheel">🎡 Food Wheel</button>
-        <button class="room-tv-tab" data-game="teenpatti">🃏 Teen Patti</button>
-      </div>
-      <div class="room-tv-frame-wrap" id="room-tv-frame-wrap">
-        <iframe id="room-tv-frame" class="room-tv-frame" title="Room Game" src="about:blank" allow="autoplay"></iframe>
-      </div>
-    </div>
   </div>
 
   <!-- Treasure Chest -->
@@ -153,7 +137,7 @@
     <button id="btn-mic-toggle" class="tool-btn" title="Mic">🎤</button>
     <button id="btn-open-gift" class="tool-btn" title="Gift">🎁</button>
     <button id="btn-open-music" class="tool-btn" title="Music">🎵</button>
-    <button id="btn-toggle-game" class="tool-btn game-tool-btn hidden" title="Game">🎮<span class="new-badge">NEW</span></button>
+    <button id="btn-open-dice" class="tool-btn" title="Dice Game">🎲</button>
     <input id="chat-input" type="text" placeholder="মেসেজ লেখো..." class="chat-input">
     <button id="btn-send-chat" class="tool-btn tool-btn-accent" title="Send">➤</button>
   </div>
@@ -161,25 +145,10 @@
 
 <!-- ============ GIFT MODAL ============ -->
 <div id="modal-gift" class="modal-overlay hidden">
-  <div class="modal-card gift-modal-card">
-    <div class="gift-modal-head">
-      <h3>Gift পাঠাও</h3>
-      <div class="gift-wallet-pill">🪙 <span id="gift-modal-coins">0</span></div>
-    </div>
+  <div class="modal-card">
+    <h3>Gift পাঠাও</h3>
     <p class="hint">কাকে পাঠাবে বেছে নাও:</p>
     <select id="gift-target-select" class="field-solo"></select>
-    <div id="gift-tabs" class="gift-tabs">
-      <button class="gift-tab active" data-tier="normal">Normal</button>
-      <button class="gift-tab" data-tier="vip">VIP</button>
-      <button class="gift-tab" data-tier="legend">Legend</button>
-    </div>
-    <div id="gift-preview" class="gift-preview hidden">
-      <span id="gift-preview-emoji" class="gift-preview-emoji"></span>
-      <div class="gift-preview-info">
-        <span id="gift-preview-name"></span>
-        <span id="gift-preview-price"></span>
-      </div>
-    </div>
     <div id="gift-catalog" class="gift-grid"></div>
     <div class="modal-actions">
       <button id="btn-close-gift" class="btn btn-ghost btn-block">বন্ধ করো</button>
@@ -223,6 +192,20 @@
   </div>
 </div>
 
+<div id="modal-dice" class="modal-overlay hidden">
+  <div class="modal-card">
+    <h3>🎲 Dice Game</h3>
+    <p class="hint">১-৬ এর মধ্যে সংখ্যা বেছে নাও, coin বাজি ধরো। জিতলে ৫ গুণ ফেরত।</p>
+    <div class="dice-pick-row" id="dice-pick-row"></div>
+    <label class="field-label">বাজির পরিমাণ (coins)</label>
+    <input id="dice-stake" type="number" min="1" max="500" value="10" class="field-solo">
+    <div id="dice-result" class="dice-result hidden"></div>
+    <div class="modal-actions">
+      <button id="btn-dice-play" class="btn btn-primary btn-block">খেলো</button>
+    </div>
+    <button id="btn-close-dice" class="btn btn-ghost btn-block">বন্ধ করো</button>
+  </div>
+</div>
 
 <!-- ============ ROOM MODERATION MODAL ============ -->
 <div id="modal-room-mod" class="modal-overlay hidden">
@@ -247,11 +230,6 @@
         <button id="btn-mod-make-admin" class="btn btn-primary">Admin বানাও</button>
         <button id="btn-mod-remove-admin" class="btn btn-ghost">Admin বাদ দাও</button>
       </div>
-    </div>
-
-    <div class="mod-section">
-      <p class="field-label">Room Logo</p>
-      <input id="mod-logo-input" type="file" accept="image/*" class="field-solo">
     </div>
 
     <div class="mod-section">

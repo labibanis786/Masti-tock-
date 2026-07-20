@@ -35,14 +35,9 @@
 }
 
 *{ box-sizing: border-box; }
-/* Fix (pinch/double-tap zoom bug): the viewport meta tag alone doesn't
-   stop zoom gestures on every browser/WebView. touch-action: manipulation
-   explicitly tells the browser not to handle pinch-zoom or double-tap-zoom
-   itself, while still allowing normal scrolling/tapping everywhere. */
-html,body{ height:100%; overflow-x:hidden; touch-action: manipulation; }
+html,body{ height:100%; }
 body{
   margin:0;
-  width:100%;
   background:
     radial-gradient(120% 60% at 50% -10%, rgba(138,92,246,0.18) 0%, transparent 55%),
     radial-gradient(100% 80% at 50% 110%, rgba(244,196,99,0.08) 0%, transparent 60%),
@@ -51,19 +46,6 @@ body{
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
-  touch-action: pan-y;
-}
-/* Bug fix: while the room game (Food Wheel / Teen Patti) overlay is open,
-   the page behind it must not pinch-zoom or horizontal-scroll. Applied to
-   <body> for the duration the overlay is open (see app.js openRoomGame /
-   closeRoomGame). This is what was causing the zoomed-in / shifted / cut-off
-   game view — the background page was zooming and panning underneath it. */
-body.game-locked{
-  position: fixed;
-  inset: 0;
-  overflow: hidden;
-  touch-action: none;
-  width: 100vw;
 }
 h1,h2,h3{ font-family: var(--font-display); font-weight:600; margin:0; letter-spacing:-0.01em; }
 p{ margin:0; }
@@ -160,9 +142,7 @@ textarea.field-solo{ resize:vertical; min-height:70px; }
   background: linear-gradient(145deg, var(--accent-gold-dim), rgba(138,92,246,0.22));
   border: 1px solid var(--line);
   display:flex; align-items:center; justify-content:center; font-size:22px;
-  overflow:hidden;
 }
-.room-card-icon img{ width:100%; height:100%; object-fit:cover; }
 .room-card-body{ flex:1; min-width:0; }
 .room-card-body h3{ font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .room-card-body .sub{ color:var(--text-dim); font-size:12.5px; margin-top:2px; display:block; }
@@ -197,10 +177,6 @@ textarea.field-solo{ resize:vertical; min-height:70px; }
 
 /* ---------- Voice room / stage ---------- */
 .room-topbar{ display:flex; align-items:center; gap:12px; padding:16px 16px 4px; }
-.room-logo-display{
-  width:36px; height:36px; border-radius:10px; object-fit:cover; flex-shrink:0;
-  border:1px solid var(--line);
-}
 .room-title-block{ flex:1; min-width:0; }
 .room-title-block h2{ font-size:18px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
@@ -219,34 +195,10 @@ textarea.field-solo{ resize:vertical; min-height:70px; }
   background: var(--bg-panel-2); border: 2px dashed var(--line);
   display:flex; align-items:center; justify-content:center;
   font-size:20px; color: var(--text-dim);
-  position:relative; /* overflow intentionally NOT hidden here — a VIP ring or
-  admin PNG frame is allowed to extend past the circle; only the photo itself
-  (in .seat-avatar-photo below) is clipped to a circle. */
+  position:relative; overflow:hidden; /* fixed size, contents never stretch it */
 }
 .seat.occupied .seat-circle{ border: 2px solid var(--accent-gold-dim); background: var(--bg-raised); }
-.seat-avatar-photo{ position:absolute; inset:0; border-radius:50%; overflow:hidden; }
-.seat-avatar-photo img{ width:100%; height:100%; object-fit:cover; display:block; }
-/* VIP ring on a seat — same palette as .avatar-frame-wrap, applied only when
-   the seated user actually has a VIP level (see app.js). */
-.seat-circle.vip-1{ box-shadow: 0 0 0 2px var(--vip1); }
-.seat-circle.vip-2{ box-shadow: 0 0 0 2px var(--vip2); }
-.seat-circle.vip-3{ box-shadow: 0 0 0 3px var(--accent-gold), var(--glow-gold); }
-.seat-circle.vip-4{ box-shadow: 0 0 0 3px var(--royal-purple); }
-.seat-circle.vip-5{
-  box-shadow: 0 0 0 3px var(--accent-gold), 0 0 16px rgba(244,196,99,0.55);
-  animation: frame-spin-glow 4s linear infinite;
-}
-@keyframes frame-spin-glow{
-  0%,100%{ filter: drop-shadow(0 0 3px rgba(244,196,99,0.35)); }
-  50%{ filter: drop-shadow(0 0 9px rgba(244,196,99,0.7)); }
-}
-/* Admin-issued animated PNG frame for a seat — its own layer, allowed to
-   extend past the seat circle so the artwork is never cropped. */
-.seat-circle .custom-frame-img{
-  position:absolute; inset:-18%; width:136%; height:136%;
-  pointer-events:none; z-index:2;
-  animation: custom-frame-glow 2.4s ease-in-out infinite;
-}
+.seat.occupied .seat-circle img{ width:100%; height:100%; object-fit:cover; }
 .seat.speaking .seat-circle{
   border-color: var(--accent-gold);
   box-shadow: 0 0 0 4px var(--accent-gold-dim), 0 0 24px rgba(244,196,99,0.45);
@@ -294,93 +246,25 @@ textarea.field-solo{ resize:vertical; min-height:70px; }
 .chat-input:focus{ border-color: var(--accent-gold); }
 
 /* ---------- Gift ---------- */
-.gift-modal-head{ display:flex; align-items:center; justify-content:space-between; }
-.gift-wallet-pill{ background: var(--accent-gold-dim); color:var(--accent-gold); font-weight:800; font-size:13px; padding:6px 12px; border-radius: var(--radius-round); border:1px solid rgba(244,196,99,0.3); }
-.gift-tabs{ display:flex; gap:8px; }
-.gift-tab{ flex:1; padding:8px 0; border-radius: var(--radius-round); border:1px solid var(--line); background:var(--bg-raised); color:var(--text-dim); font-weight:700; font-size:12.5px; transition: background .15s ease, color .15s ease; }
-.gift-tab.active{ background: linear-gradient(135deg, var(--accent-gold), var(--accent-gold-2)); color:#22140a; border-color:transparent; }
-.gift-preview{ display:flex; align-items:center; gap:10px; background:var(--bg-raised); border:1px solid var(--line); border-radius: var(--radius-md); padding:8px 12px; }
-.gift-preview-emoji{ font-size:30px; }
-.gift-preview-info{ display:flex; flex-direction:column; font-size:12px; }
-.gift-preview-info span:first-child{ font-weight:800; color:var(--text-bright); }
-.gift-preview-info span:last-child{ color:var(--accent-gold); font-size:11px; }
-
-.gift-modal-card{ transform: translateY(30px); opacity:0; transition: transform .28s ease, opacity .28s ease; }
-.gift-modal-card.gift-modal-open{ transform: translateY(0); opacity:1; }
-
 .gift-grid{ display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; }
-.gift-item{
-  background: linear-gradient(160deg, var(--bg-raised), var(--bg-panel-2)); border:1px solid var(--line);
-  border-radius: var(--radius-md); padding:14px 8px; text-align:center; color:var(--text-bright);
-  cursor:pointer; transition: transform .15s ease, box-shadow .15s ease;
-}
-.gift-item:hover{ transform: translateY(-3px); box-shadow: 0 6px 18px rgba(0,0,0,0.35); }
-.gift-item .emoji{ font-size:28px; display:block; margin-bottom:4px; filter: drop-shadow(0 0 6px rgba(244,196,99,0.35)); }
-.gift-item .gift-name{ display:block; font-size:10.5px; color:var(--text-soft); margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.gift-item{ background: linear-gradient(160deg, var(--bg-raised), var(--bg-panel-2)); border:1px solid var(--line); border-radius: var(--radius-md); padding:14px 8px; text-align:center; color:var(--text-bright); }
+.gift-item .emoji{ font-size:28px; display:block; margin-bottom:6px; filter: drop-shadow(0 0 6px rgba(244,196,99,0.35)); }
 .gift-item .price{ font-size:11px; color: var(--accent-gold); font-weight:800; }
-.gift-item:active, .gift-item-pressed{ transform: scale(0.9); }
-.gift-item.tier-vip{ border-color: rgba(153,102,255,0.45); }
-.gift-item.tier-vip .emoji{ filter: drop-shadow(0 0 8px rgba(153,102,255,0.55)); }
-.gift-item.tier-legend{ border-color: rgba(244,196,99,0.55); background: linear-gradient(160deg, rgba(244,196,99,0.14), var(--bg-panel-2)); }
-.gift-item.tier-legend .emoji{ filter: drop-shadow(0 0 10px rgba(244,196,99,0.75)); animation: legend-item-glow 1.8s ease-in-out infinite; }
-@keyframes legend-item-glow{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.1); } }
+.gift-item:active{ transform: scale(0.95); }
 
 /* Gift-send flight animation — floats above the seat grid on its own
-   absolutely-positioned layer, never touches seat/grid dimensions. Path is
-   driven by --start-x/--start-y/--end-x/--end-y (% of the layer), computed
-   from the sender/receiver seat positions in app.js. */
-@keyframes gift-fly-path{
-  0%{ left: var(--start-x); top: var(--start-y); opacity:0; transform: translate(-50%,-50%) scale(0.6); }
+   absolutely-positioned layer, never touches seat/grid dimensions. */
+@keyframes gift-float-across{
+  0%{ transform: translateX(-40%) translateY(10px) scale(0.7); opacity:0; }
   15%{ opacity:1; }
-  100%{ left: var(--end-x); top: var(--end-y); opacity:0; transform: translate(-50%,-50%) scale(1.15); }
+  100%{ transform: translateX(40%) translateY(-30px) scale(1.15); opacity:0; }
 }
 .gift-fly-layer{ position:absolute; inset:0; pointer-events:none; overflow:hidden; z-index:40; }
 .gift-fly-item{
-  position:absolute; font-size:34px;
-  animation-name: gift-fly-path; animation-timing-function: ease-out; animation-fill-mode: forwards;
+  position:absolute; bottom:10%; left:50%; font-size:34px;
+  animation: gift-float-across 2.2s ease-out forwards;
   filter: drop-shadow(0 0 10px rgba(244,196,99,0.5));
 }
-.gift-fly-item.tier-vip{ font-size:40px; filter: drop-shadow(0 0 14px rgba(153,102,255,0.6)); }
-.gift-fly-item.tier-legend{ font-size:48px; filter: drop-shadow(0 0 20px rgba(244,196,99,0.85)); }
-.gift-fly-item.gift-fly-trail{ font-size:26px; }
-
-/* Brief glow pulse on the receiver's seat the instant a gift lands. */
-.seat-circle.gift-hit{ animation: gift-hit-pulse .9s ease-out; }
-@keyframes gift-hit-pulse{
-  0%{ box-shadow: 0 0 0 0 rgba(244,196,99,0.8); }
-  60%{ box-shadow: 0 0 0 14px rgba(244,196,99,0); }
-  100%{ box-shadow: 0 0 0 0 rgba(244,196,99,0); }
-}
-
-/* Full-screen celebration for the top gift tier — fixed overlay, entirely
-   separate from room/seat layout so nothing else ever resizes because of it. */
-.legend-gift-overlay{
-  position:fixed; inset:0; z-index:900; display:flex; flex-direction:column;
-  align-items:center; justify-content:center; pointer-events:none;
-  opacity:0; transition: opacity .3s ease;
-  background: radial-gradient(circle at center, rgba(244,196,99,0.22), rgba(4,2,8,0.5) 70%);
-}
-.legend-gift-overlay.show{ opacity:1; }
-.legend-burst-rays{
-  position:absolute; inset:0;
-  background: conic-gradient(from 0deg, rgba(244,196,99,0) 0%, rgba(244,196,99,0.35) 15%, rgba(244,196,99,0) 30%);
-  animation: legend-rays-spin 2.4s linear;
-  mix-blend-mode: screen;
-}
-.legend-gift-emoji{ font-size:96px; animation: legend-pop 2.4s ease-out; filter: drop-shadow(0 0 30px rgba(244,196,99,0.8)); }
-.legend-gift-text{
-  margin-top:10px; font-size:22px; font-weight:800; color:var(--accent-gold);
-  text-shadow: 0 0 12px rgba(244,196,99,0.6); animation: legend-text-in .4s ease;
-}
-@keyframes legend-pop{
-  0%{ transform:scale(0.3); opacity:0; }
-  20%{ transform:scale(1.2); opacity:1; }
-  35%{ transform:scale(1); }
-  85%{ opacity:1; }
-  100%{ opacity:0; transform:scale(1.05); }
-}
-@keyframes legend-rays-spin{ 0%{ transform:rotate(0deg); } 100%{ transform:rotate(360deg); } }
-@keyframes legend-text-in{ 0%{ opacity:0; transform:translateY(8px); } 100%{ opacity:1; transform:translateY(0); } }
 
 /* ---------- Profile ---------- */
 .profile-hero{ text-align:center; padding: 14px 0 8px; display:flex; flex-direction:column; gap:10px; align-items:center; }
@@ -570,90 +454,5 @@ textarea.field-solo{ resize:vertical; min-height:70px; }
 
 /* ---------- Reduced motion ---------- */
 @media (prefers-reduced-motion: reduce){
-  .chest-glow-ring, .chest-sparkle, .chest-reward-burst, .avatar-frame-wrap.vip-5, .avatar-frame-wrap .custom-frame-img, .seat-circle.vip-5, .seat-circle .custom-frame-img{ animation:none; }
-}
-
-/* ---------- Seat-8 Room TV Screen (Food Wheel / Teen Patti, always visible & synced) ---------- */
-/* ---------- Room Game Overlay (Food Wheel / Teen Patti) ----------
-   Fix: this used to be a normal in-flow block under the seats, forced
-   visible on every renderSeats() call. A 9:12-aspect block appearing/
-   disappearing in-flow made the whole room page jump every time seats
-   re-rendered (very frequently — every seat change, gift, etc). Now it's
-   a position:fixed bottom sheet, off-flow entirely, so it can never shift
-   any other element. It's hidden by being translated fully off-screen by
-   default, and only ever shown via the explicit toggle button — never
-   forced on. Leaves the header + top seat row visible above it. */
-/* Fix (screen-lock bug): the overlay used to run all the way to bottom:0,
-   which meant it physically covered the bottom toolbar (Mic/Gift/Music/
-   Dice/Chat) sitting at the same fixed viewport position — that's why the
-   toolbar "disappeared" once a game was open. It now stops above the
-   toolbar's real height (+ safe-area for notched phones) so the toolbar
-   stays visible and tappable the whole time the game is open, exactly like
-   the reference screenshot. */
-.room-tv-screen{
-  position: fixed; left:0; right:0; width:100%;
-  bottom: calc(66px + env(safe-area-inset-bottom));
-  top: 190px;
-  /* Fix (black side bars): this used to be capped at max-width:560px and
-     centered, which is exactly what left the page's dark background
-     showing as bars down both sides on any screen wider than that. The
-     overlay now always spans the device's full width. */
-  margin: 0;
-  border-radius: 22px 22px 0 0;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-bottom: none;
-  background: var(--bg-panel-2);
-  box-shadow: 0 -12px 40px rgba(0,0,0,0.55);
-  z-index: 700;
-  display: flex; flex-direction: column;
-  transform: translateY(105%);
-  transition: transform .38s cubic-bezier(.32,.9,.34,1);
-  pointer-events: none;
-  touch-action: none;
-}
-.room-tv-screen.tv-open{ transform: translateY(0); pointer-events: auto; }
-.room-tv-close{
-  position:absolute; top:8px; right:10px; z-index:5;
-  width:30px; height:30px; border-radius:50%;
-  background: rgba(0,0,0,0.55); color:#fff; border:1px solid var(--line);
-  font-size:15px; display:flex; align-items:center; justify-content:center;
-}
-.room-tv-tabs{ display:flex; gap:6px; padding:12px 12px 0; }
-.room-tv-tab{
-  flex:1; background: var(--bg-raised); color: var(--text-soft);
-  border:1px solid var(--line); border-bottom:none;
-  border-radius: 10px 10px 0 0; padding:7px 4px; font-size:11.5px; font-weight:700;
-  cursor:pointer;
-}
-.room-tv-tab.active{ background: var(--bg-panel-2); color: var(--accent-gold); }
-/* Fix (letterbox / black-bars bug): the frame used to be pinned at a fixed
-   400x700 design size and scaled down with a transform to fit inside the
-   wrap, which is what produced the black bars on the sides (the scaled box
-   never matched the wrap's real aspect ratio, so the leftover space showed
-   the wrap's own black background). The iframe now simply fills the wrap
-   at 100% width/height and the game inside (which is already a responsive
-   Tailwind layout — min-h-screen/w-full) reflows to fit that box itself,
-   so there is no leftover space and nothing to letterbox. */
-.room-tv-frame-wrap{ position:relative; width:100%; flex:1; background:transparent; overflow:hidden; touch-action: pan-x pan-y; }
-.room-tv-frame{
-  position:absolute; inset:0;
-  width:100% !important; height:100% !important;
-  border:0;
-  /* Removed the old fixed width/height/transform inline styles that JS used
-     to set — those forced a reflow (and the visible flicker) on every
-     resize/orientation change. */
-  transform:none !important;
-  will-change: transform;
-}
-
-/* Bottom toolbar must always render above the game overlay's z-index (700)
-   so Mic/Gift/Music/Dice/Chat/Send are never hidden behind it. */
-.room-toolbar{ position: relative; z-index: 800; }
-
-.game-tool-btn{ position:relative; }
-.new-badge{
-  position:absolute; top:-6px; right:-8px; background: var(--accent-rose); color:#2c0710;
-  font-size:8px; font-weight:800; padding:1px 5px; border-radius:999px; letter-spacing:.02em;
-  box-shadow: 0 0 6px rgba(232,93,117,0.6);
+  .chest-glow-ring, .chest-sparkle, .chest-reward-burst, .avatar-frame-wrap.vip-5, .avatar-frame-wrap .custom-frame-img{ animation:none; }
 }

@@ -1,0 +1,25 @@
+{
+  "9632587452": {
+    "userId": "10153763",
+    "name": "Rohan",
+    "mobile": "9632587452",
+    "photo": "/photos/1784571840600-6936.jpg",
+    "followers": 0,
+    "following": 0,
+    "followersList": [],
+    "followingList": [],
+    "visitors": 0,
+    "coins": 6320000,
+    "diamonds": 0,
+    "level": 31601,
+    "vipLevel": 0,
+    "banned": false,
+    "verified": false,
+    "agencyId": null,
+    "isHost": true,
+    "activeFrame": null,
+    "lastDailyRewardAt": null,
+    "lastWeeklyRewardAt": "2026-07-20T18:24:21.853Z",
+    "bio": ""
+  }
+}

@@ -222,21 +222,15 @@ async function loadRooms() {
       <td><b>${escapeHtml(room.roomName)}</b><br><span class="mono">${escapeHtml(room.roomId)}</span></td>
       <td>${escapeHtml(room.hostName)}</td>
       <td class="mono">👥 ${room.onlineCount}</td>
-      <td>${room.roomLocked ? '<span class="badge badge-danger">Locked</span>' : '<span class="badge badge-ok">Open</span>'}
-        ${room.gameEnabled ? '<span class="badge badge-ok">Game On</span>' : '<span class="badge badge-danger">Game Off</span>'}</td>
+      <td>${room.roomLocked ? '<span class="badge badge-danger">Locked</span>' : '<span class="badge badge-ok">Open</span>'}</td>
       <td class="cell-actions">
         <button class="btn btn-sm ${room.roomLocked ? "btn-ghost" : "btn-warn"} act-lock">${room.roomLocked ? "Unlock" : "Lock"}</button>
-        <button class="btn btn-sm ${room.gameEnabled ? "btn-warn" : "btn-ghost"} act-game">${room.gameEnabled ? "Game বন্ধ করো" : "Game চালু করো"}</button>
         <button class="btn btn-sm btn-danger act-del">Delete</button>
       </td>
     `;
     tr.querySelector(".act-lock").addEventListener("click", async () => {
       const r2 = await api(`/api/admin/rooms/${room.roomId}/lock`, "POST", { locked: !room.roomLocked });
       if (r2.success) { toast("রুম আপডেট হয়েছে"); loadRooms(); } else toast(r2.message, true);
-    });
-    tr.querySelector(".act-game").addEventListener("click", async () => {
-      const r2 = await api(`/api/admin/rooms/${room.roomId}/game`, "POST", { enabled: !room.gameEnabled });
-      if (r2.success) { toast("Game সেটিং আপডেট হয়েছে"); loadRooms(); } else toast(r2.message, true);
     });
     tr.querySelector(".act-del").addEventListener("click", async () => {
       if (!confirm(`"${room.roomName}" ডিলিট করবে?`)) return;

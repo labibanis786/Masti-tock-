@@ -25,22 +25,6 @@ let threadPeerId = null;
 let threadPeerName = null;
 
 // ---------------------------------------------------------------------------
-// Fix (pinch/double-tap zoom bug): some mobile browsers/WebViews still let
-// people zoom the page even with user-scalable=no and touch-action set —
-// which breaks every fixed-position overlay (room TV screen, modals, the
-// bottom toolbar). This is a hard JS-level safety net on top of those:
-// block any multi-finger touch move, any native pinch gesture, and any
-// double-tap that's fast enough to be a zoom tap rather than two real taps.
-document.addEventListener("touchmove", (e) => { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
-document.addEventListener("gesturestart", (e) => e.preventDefault());
-let __lastTouchEndTs = 0;
-document.addEventListener("touchend", (e) => {
-  const now = Date.now();
-  if (now - __lastTouchEndTs <= 300) e.preventDefault();
-  __lastTouchEndTs = now;
-}, { passive: false });
-
-// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 function $(id) { return document.getElementById(id); }
@@ -199,18 +183,10 @@ function connectSocket() {
     $("room-host-display").textContent = "Host: " + room.hostName;
     if (room.music && room.music.url) setMusicUI(room.music);
     $("stage-wrap").style.backgroundImage = room.background ? `url(${room.background})` : "";
-    setRoomLogo(room.logo);
     const canModerate = room.hostId === me.userId || (room.adminIds || []).includes(me.userId);
     $("btn-room-mod").classList.toggle("hidden", !canModerate);
     if (room.treasureChest) renderChest(room.treasureChest);
     initMicIfNeeded();
-
-    // Fix: the game overlay's toggle button is only shown when an admin has
-    // actually enabled games for this room (see Admin Panel → Rooms). If an
-    // admin turns it off while someone has it open, close it for them too.
-    const gameAllowed = room.gameEnabled !== false;
-    $("btn-toggle-game").classList.toggle("hidden", !gameAllowed);
-    if (!gameAllowed) closeRoomGame();
   });
 
   socket.on("user-count", (data) => { $("room-online-count").textContent = "👥 " + data.count; });
@@ -218,7 +194,7 @@ function connectSocket() {
   socket.on("seat-update", (data) => {
     if (data.action === "take") {
       if (data.oldSeatNumber && seatMap[data.oldSeatNumber]) delete seatMap[data.oldSeatNumber];
-      seatMap[data.seatNumber] = { userId: data.userId, socketId: data.socketId, userName: data.userName, userPhoto: data.userPhoto, role: data.role, activeFrame: data.activeFrame || null, vipLevel: data.vipLevel || 0 };
+      seatMap[data.seatNumber] = { userId: data.userId, socketId: data.socketId, userName: data.userName, userPhoto: data.userPhoto, role: data.role };
       if (data.userId === me.userId) {
         mySeatNumber = data.seatNumber;
       } else if (mySeatNumber !== null) {
@@ -252,9 +228,7 @@ function connectSocket() {
       time: "", system: true
     });
     pushGiftBanner(`${data.fromName} sent ${data.gift.emoji} ${data.gift.name}`);
-    spawnGiftFly(data.gift, data.fromUserId, data.toUserId);
-    playGiftSound(data.gift.tier);
-    flashSeatReceive(data.toUserId);
+    spawnGiftFly(data.gift.emoji);
     toast(`🎁 ${data.fromName} sent ${data.gift.emoji} ${data.gift.name}`);
     if (data.toUserId === me.userId) {
       me.diamonds += data.gift.price;
@@ -264,32 +238,6 @@ function connectSocket() {
   });
 
   socket.on("music-update", (music) => setMusicUI(music));
-
-  socket.on("wallet-update", (data) => {
-    if (typeof data.coins === "number") me.coins = data.coins;
-    if (typeof data.diamonds === "number") me.diamonds = data.diamonds;
-    if (typeof data.level === "number") me.level = data.level;
-    if (typeof data.vipLevel === "number") me.vipLevel = data.vipLevel;
-    saveSession(); fillHomeProfile();
-    const menuCoins = $("menu-wallet-coins"), menuDiamonds = $("menu-wallet-diamonds");
-    if (menuCoins) menuCoins.textContent = me.coins;
-    if (menuDiamonds) menuDiamonds.textContent = me.diamonds;
-    const walletCoins = $("wallet-coins"), walletDiamonds = $("wallet-diamonds");
-    if (walletCoins) walletCoins.textContent = me.coins;
-    if (walletDiamonds) walletDiamonds.textContent = me.diamonds;
-    const pill = $("gift-modal-coins");
-    if (pill && !$("modal-gift").classList.contains("hidden")) pill.textContent = me.coins;
-
-    // Fix (stale in-game balance): coins can change for any reason while a
-    // room game is open (a gift sent/received, a reward, an admin
-    // adjustment) — not just from playing. Push the fresh real balance
-    // straight into whichever game is currently loaded so its on-screen
-    // wallet always matches the account, in real time, not just at open.
-    if ($("room-tv-screen").classList.contains("tv-open") && $("room-tv-frame").src) {
-      const gameType = roomTvActiveGame === "teenpatti" ? "TEENPATTI_INIT" : "FOODWHEEL_INIT";
-      try { $("room-tv-frame").contentWindow.postMessage({ type: gameType, balance: me.coins || 0 }, "*"); } catch (e) {}
-    }
-  });
 
   socket.on("room-error", (data) => { toast(data.message || "রুমে সমস্যা হয়েছে"); });
 
@@ -317,11 +265,6 @@ function connectSocket() {
     if (currentRoom) currentRoom.background = data.url;
   });
 
-  socket.on("room-logo-update", (data) => {
-    setRoomLogo(data.url);
-    if (currentRoom) currentRoom.logo = data.url;
-  });
-
   socket.on("chat-cleared", (data) => {
     $("chat-log").innerHTML = "";
     appendChatMsg({ system: true, message: `${data.by} chat clear করেছে` });
@@ -330,9 +273,19 @@ function connectSocket() {
   socket.on("kicked", (data) => {
     toast(data.message || "তোমাকে রুম থেকে বের করে দেওয়া হয়েছে");
     teardownVoice();
-    closeRoomGame();
     currentRoomId = null; currentRoom = null;
     showView("view-home"); loadRoomList();
+  });
+
+  socket.on("game-dice-result", (data) => {
+    const box = $("dice-result");
+    box.classList.remove("hidden", "win", "lose");
+    box.classList.add(data.won ? "win" : "lose");
+    box.textContent = data.won
+      ? `🎉 তুমি জিতেছো! Dice: ${data.roll} · +${data.bet * 5} coins`
+      : `😔 হারলে। Dice: ${data.roll} · -${data.bet} coins`;
+    me.coins = data.coins;
+    saveSession(); fillHomeProfile();
   });
 
   socket.on("chest-opened", (data) => {
@@ -434,7 +387,7 @@ function renderRoomList(rooms) {
     const card = document.createElement("div");
     card.className = "room-card";
     card.innerHTML = `
-      <div class="room-card-icon">${room.logo ? `<img src="${escapeHtml(room.logo)}" alt="">` : "🎙️"}</div>
+      <div class="room-card-icon">🎙️</div>
       <div class="room-card-body">
         <h3>${escapeHtml(room.roomName)}</h3>
         <span class="sub">Host: ${escapeHtml(room.hostName)} · 👥 ${room.onlineCount}</span>
@@ -450,15 +403,6 @@ function escapeHtml(str) {
   const d = document.createElement("div");
   d.textContent = str == null ? "" : String(str);
   return d.innerHTML;
-}
-
-// Shows/hides the room logo in the room header — used on join and whenever
-// the owner/admin changes it live.
-function setRoomLogo(url) {
-  const img = $("room-logo-display");
-  if (!img) return;
-  if (url) { img.src = url; img.classList.remove("hidden"); }
-  else { img.src = ""; img.classList.add("hidden"); }
 }
 
 $("btn-create-room").addEventListener("click", () => {
@@ -486,12 +430,10 @@ document.querySelectorAll('.nav-btn[data-nav="inbox"]').forEach((b) => b.addEven
 function joinRoom(roomId) {
   currentRoomId = roomId;
   mySeatNumber = null;
-  closeRoomGame();
   seatMap = {};
   speakingUsers.clear();
   $("chat-log").innerHTML = "";
   $("btn-room-mod").classList.add("hidden");
-  setRoomLogo(null);
   socket.emit("join-room", { roomId, userId: me.userId, userName: me.name, userPhoto: me.photo || "" });
   loadGiftBanner(roomId);
   showView("view-room");
@@ -501,7 +443,6 @@ $("btn-leave-room").addEventListener("click", () => {
   if (currentRoomId) socket.emit("leave-room", { roomId: currentRoomId, userId: me.userId });
   teardownVoice();
   stopChestCountdown();
-  closeRoomGame();
   currentRoomId = null;
   currentRoom = null;
   showView("view-home");
@@ -512,7 +453,7 @@ function hydrateSeatMap(seats) {
   seatMap = {};
   seats.forEach((seat, i) => {
     if (seat) {
-      seatMap[i + 1] = { userId: seat.userId, socketId: seat.socketId, userName: seat.userName, userPhoto: seat.userPhoto, role: seat.role, activeFrame: seat.activeFrame || null, vipLevel: seat.vipLevel || 0 };
+      seatMap[i + 1] = { userId: seat.userId, socketId: seat.socketId, userName: seat.userName, userPhoto: seat.userPhoto, role: seat.role };
       if (seat.userId === me.userId) mySeatNumber = i + 1;
     }
   });
@@ -526,9 +467,7 @@ function seatsFromMap() {
       userName: entry.userName || currentRoom?.onlineUsers?.find(u => u.userId === entry.userId)?.userName || "User",
       userPhoto: entry.userPhoto || "",
       socketId: entry.socketId,
-      role: entry.role,
-      activeFrame: entry.activeFrame || null,
-      vipLevel: entry.vipLevel || 0
+      role: entry.role
     };
   });
   return seats;
@@ -544,18 +483,12 @@ function renderSeats(seats) {
     const div = document.createElement("div");
     div.className = "seat" + (seat ? " occupied" : "") + (isLocked ? " locked" : "") +
       (seat && speakingUsers.has(seat.userId) ? " speaking" : "");
-    if (seat) div.dataset.userId = seat.userId;
     const circle = document.createElement("div");
     circle.className = "seat-circle";
     if (seat) {
-      const photoWrap = document.createElement("div");
-      photoWrap.className = "seat-avatar-photo";
       const img = document.createElement("img");
       img.src = seat.userPhoto || placeholderAvatar(seat.userName);
-      photoWrap.appendChild(img);
-      circle.appendChild(photoWrap);
-      if (seat.vipLevel > 0) applyFrameRing(circle, seat.vipLevel);
-      applyCustomFrame(circle, seat.activeFrame);
+      circle.appendChild(img);
       if (seat.role === "owner" || seat.role === "admin") {
         const badge = document.createElement("span");
         badge.className = "seat-role";
@@ -629,105 +562,16 @@ function pushGiftBanner(text) {
 }
 
 // Floating gift animation across the stage — its own absolute layer,
-// never touches seat-grid layout/dimensions. Flies from the sender's seat
-// to the receiver's seat when both are seated, otherwise falls back to a
-// simple center float so it never breaks for un-seated senders/receivers.
-function seatCircleRect(userId) {
-  const el = document.querySelector(`#seat-grid [data-user-id="${userId}"] .seat-circle`);
-  if (!el) return null;
-  return el.getBoundingClientRect();
-}
-function spawnGiftFly(gift, fromUserId, toUserId) {
+// never touches seat-grid layout/dimensions.
+function spawnGiftFly(emoji) {
   const layer = $("gift-fly-layer");
   if (!layer) return;
-  const tier = gift.tier || "normal";
-  const layerRect = layer.getBoundingClientRect();
-  const fromRect = seatCircleRect(fromUserId);
-  const toRect = seatCircleRect(toUserId);
-
-  const pct = (rect, fallbackX, fallbackY) => {
-    if (!rect || !layerRect.width || !layerRect.height) return { x: fallbackX, y: fallbackY };
-    const cx = rect.left + rect.width / 2 - layerRect.left;
-    const cy = rect.top + rect.height / 2 - layerRect.top;
-    return { x: (cx / layerRect.width) * 100, y: (cy / layerRect.height) * 100 };
-  };
-  const start = pct(fromRect, 50, 92);
-  const end = pct(toRect, 50, 10);
-
-  const trailCount = tier === "legend" ? 4 : tier === "vip" ? 3 : 1;
-  const duration = tier === "legend" ? 3.0 : tier === "vip" ? 2.4 : 1.8;
-
-  for (let i = 0; i < trailCount; i++) {
-    const el = document.createElement("div");
-    el.className = "gift-fly-item tier-" + tier + (i > 0 ? " gift-fly-trail" : "");
-    el.textContent = gift.emoji;
-    el.style.setProperty("--start-x", start.x + "%");
-    el.style.setProperty("--start-y", start.y + "%");
-    el.style.setProperty("--end-x", end.x + "%");
-    el.style.setProperty("--end-y", end.y + "%");
-    el.style.animationDuration = duration + "s";
-    el.style.animationDelay = (i * 0.08) + "s";
-    if (i > 0) el.style.opacity = String(0.5 - i * 0.1);
-    layer.appendChild(el);
-    setTimeout(() => el.remove(), (duration + 0.5) * 1000);
-  }
-
-  if (tier === "legend") spawnLegendBurst(gift);
-}
-
-// Full-screen celebration for the highest gift tier — its own fixed overlay,
-// completely separate from the room layout so it never resizes anything.
-let legendBurstTimer = null;
-function spawnLegendBurst(gift) {
-  const overlay = $("legend-gift-overlay");
-  if (!overlay) return;
-  $("legend-gift-emoji").textContent = gift.emoji;
-  $("legend-gift-text").textContent = `${gift.name} 🔥`;
-  overlay.classList.remove("hidden");
-  overlay.classList.add("show");
-  clearTimeout(legendBurstTimer);
-  legendBurstTimer = setTimeout(() => {
-    overlay.classList.remove("show");
-    setTimeout(() => overlay.classList.add("hidden"), 300);
-  }, 2400);
-}
-
-// Brief glow pulse on the receiver's seat the instant a gift lands.
-function flashSeatReceive(userId) {
-  const el = document.querySelector(`#seat-grid [data-user-id="${userId}"] .seat-circle`);
-  if (!el) return;
-  el.classList.add("gift-hit");
-  setTimeout(() => el.classList.remove("gift-hit"), 900);
-}
-
-// Small synthesized chime per gift tier — no audio files needed, and it
-// only ever plays in response to a gift a user already triggered/received.
-let audioCtx = null;
-function ensureAudioCtx() {
-  if (!audioCtx) {
-    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; }
-  }
-  if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
-  return audioCtx;
-}
-function playGiftSound(tier) {
-  const ctx = ensureAudioCtx();
-  if (!ctx) return;
-  const now = ctx.currentTime;
-  const freqsByTier = { normal: [660], vip: [660, 880], legend: [660, 880, 1100, 1320] };
-  const freqs = freqsByTier[tier] || freqsByTier.normal;
-  freqs.forEach((f, i) => {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.value = f;
-    const t0 = now + i * 0.09;
-    gain.gain.setValueAtTime(0.0001, t0);
-    gain.gain.exponentialRampToValueAtTime(0.2, t0 + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.4);
-    osc.connect(gain); gain.connect(ctx.destination);
-    osc.start(t0); osc.stop(t0 + 0.42);
-  });
+  const el = document.createElement("div");
+  el.className = "gift-fly-item";
+  el.textContent = emoji;
+  el.style.left = (28 + Math.random() * 44) + "%";
+  layer.appendChild(el);
+  setTimeout(() => el.remove(), 2300);
 }
 
 async function loadGiftBanner(roomId) {
@@ -737,38 +581,6 @@ async function loadGiftBanner(roomId) {
 }
 
 // ---------------- Gifts ----------------
-let activeGiftTier = "normal";
-function renderGiftGrid() {
-  const grid = $("gift-catalog");
-  grid.innerHTML = "";
-  GIFT_CATALOG_CACHE.gifts.filter(g => (g.tier || "normal") === activeGiftTier).forEach((g) => {
-    const item = document.createElement("div");
-    item.className = "gift-item tier-" + (g.tier || "normal");
-    item.innerHTML = `<span class="emoji">${g.emoji}</span><span class="gift-name">${escapeHtml(g.name)}</span><span class="price">${g.price} 🪙</span>`;
-    item.addEventListener("mouseenter", () => showGiftPreview(g));
-    item.addEventListener("touchstart", () => showGiftPreview(g), { passive: true });
-    item.addEventListener("click", () => {
-      item.classList.add("gift-item-pressed");
-      setTimeout(() => item.classList.remove("gift-item-pressed"), 220);
-      sendGift(g.id);
-    });
-    grid.appendChild(item);
-  });
-}
-function showGiftPreview(g) {
-  const box = $("gift-preview");
-  $("gift-preview-emoji").textContent = g.emoji;
-  $("gift-preview-name").textContent = g.name;
-  $("gift-preview-price").textContent = g.price + " 🪙 · " + (g.tier || "normal").toUpperCase();
-  box.classList.remove("hidden");
-}
-$("gift-tabs").addEventListener("click", (e) => {
-  const btn = e.target.closest(".gift-tab");
-  if (!btn) return;
-  activeGiftTier = btn.dataset.tier;
-  $("gift-tabs").querySelectorAll(".gift-tab").forEach(b => b.classList.toggle("active", b === btn));
-  renderGiftGrid();
-});
 $("btn-open-gift").addEventListener("click", async () => {
   if (!GIFT_CATALOG_CACHE.gifts.length) {
     const r = await api("/api/gifts/catalog");
@@ -781,13 +593,16 @@ $("btn-open-gift").addEventListener("click", async () => {
     opt.value = u.userId; opt.textContent = u.userName;
     select.appendChild(opt);
   });
-  $("gift-modal-coins").textContent = me.coins || 0;
-  $("gift-preview").classList.add("hidden");
-  renderGiftGrid();
-  const modal = $("modal-gift");
-  modal.classList.remove("hidden");
-  modal.querySelector(".gift-modal-card").classList.remove("gift-modal-open");
-  requestAnimationFrame(() => modal.querySelector(".gift-modal-card").classList.add("gift-modal-open"));
+  const grid = $("gift-catalog");
+  grid.innerHTML = "";
+  GIFT_CATALOG_CACHE.gifts.forEach((g) => {
+    const item = document.createElement("div");
+    item.className = "gift-item";
+    item.innerHTML = `<span class="emoji">${g.emoji}</span><span class="price">${g.price} 🪙</span>`;
+    item.addEventListener("click", () => sendGift(g.id));
+    grid.appendChild(item);
+  });
+  $("modal-gift").classList.remove("hidden");
 });
 $("btn-close-gift").addEventListener("click", () => $("modal-gift").classList.add("hidden"));
 function sendGift(giftId) {
@@ -1271,150 +1086,32 @@ async function openAgency() {
 }
 
 // ===========================================================================
-// ROOM TV SCREEN — Food Wheel / Teen Patti, opened on demand as a bottom-
-// sheet overlay (see the room-tv-screen CSS fix note for why it's no longer
-// a permanently-visible in-flow block).
+// DICE GAME
 // ===========================================================================
-const ROOM_TV_GAMES = {
-  foodwheel: "/foodwheel/index.html",
-  teenpatti: "/teenpatti/index.html"
-};
-let roomTvActiveGame = "foodwheel";
-let roomTvSyncTimer = null;
-
-function setRoomTvGame(key) {
-  if (!ROOM_TV_GAMES[key]) return;
-  roomTvActiveGame = key;
-  $("room-tv-frame").src = ROOM_TV_GAMES[key];
-  document.querySelectorAll(".room-tv-tab").forEach((tab) => {
-    tab.classList.toggle("active", tab.dataset.game === key);
-  });
-}
-
-document.querySelectorAll(".room-tv-tab").forEach((tab) => {
-  tab.addEventListener("click", () => setRoomTvGame(tab.dataset.game));
+let dicePick = 1;
+(function buildDicePicker() {
+  const row = $("dice-pick-row");
+  for (let n = 1; n <= 6; n++) {
+    const b = document.createElement("button");
+    b.className = "pick-btn" + (n === 1 ? " selected" : "");
+    b.textContent = n;
+    b.addEventListener("click", () => {
+      dicePick = n;
+      row.querySelectorAll(".pick-btn").forEach(x => x.classList.remove("selected"));
+      b.classList.add("selected");
+    });
+    row.appendChild(b);
+  }
+})();
+$("btn-open-dice").addEventListener("click", () => {
+  $("dice-result").classList.add("hidden");
+  $("modal-dice").classList.remove("hidden");
 });
-
-// Synced — when the host (whoever taps 🎮) opens or closes the game, a
-// "game-toggle" event is broadcast to everyone else in the room so it opens
-// full-screen on every participant's screen at the same time. The
-// `fromRemote` flag on open/close is set only when we're reacting to that
-// broadcast, so we don't re-emit it and cause a loop.
-$("btn-toggle-game").addEventListener("click", () => openRoomGame());
-$("btn-room-tv-close").addEventListener("click", () => closeRoomGame());
-
-let roomMusicWasPlayingBeforeGame = false;
-
-function openRoomGame(game, fromRemote) {
-  document.body.classList.add("game-locked");
-  $("room-tv-screen").classList.add("tv-open");
-  // Fix (sluggish app / stuck UI after playing): always load a fresh
-  // instance of the game on open rather than trusting a stale `.src` check.
-  // Combined with the teardown in closeRoomGame() below, this guarantees
-  // the game is never silently running in the background when the panel
-  // is closed.
-  setRoomTvGame(game || roomTvActiveGame);
-
-  // Fix (audio bug): the room's background music used to keep playing
-  // underneath the game. Pause it locally while the game is open (each
-  // user's own playback only — this doesn't touch the shared music state
-  // for others) and remember whether it was playing so we can resume it
-  // on close instead of guessing.
-  const musicEl = $("room-audio");
-  if (musicEl) {
-    roomMusicWasPlayingBeforeGame = !musicEl.paused;
-    musicEl.pause();
-  }
-
-  if (!fromRemote && currentRoomId) {
-    socket.emit("game-toggle", { roomId: currentRoomId, open: true, game: game || roomTvActiveGame });
-  }
-}
-function closeRoomGame(fromRemote) {
-  document.body.classList.remove("game-locked");
-  $("room-tv-screen").classList.remove("tv-open");
-
-  // Fix (app feels stuck / leave-room unresponsive after playing): the
-  // game iframe used to keep running forever in the background even once
-  // "closed" here (only visually hidden via CSS), so all its timers —
-  // Teen Patti's bot betting/dealing loops, Food Wheel's spin simulation —
-  // kept firing and competing for the main thread the whole time you stayed
-  // in the room, which is what made the rest of the UI (leave button, room
-  // settings, chat) feel sluggish or unresponsive. Unloading the iframe
-  // fully stops all of that; setRoomTvGame() loads a fresh instance again
-  // next time the panel is opened.
-  $("room-tv-frame").src = "about:blank";
-
-  const musicEl = $("room-audio");
-  if (musicEl && roomMusicWasPlayingBeforeGame) {
-    musicEl.play().catch(() => {});
-  }
-  roomMusicWasPlayingBeforeGame = false;
-
-  if (!fromRemote && currentRoomId) {
-    socket.emit("game-toggle", { roomId: currentRoomId, open: false });
-  }
-}
-
-// Someone else in the room opened/closed the game — mirror it here so
-// everyone sees the same full-screen game at the same time.
-socket.on("game-toggle", (data) => {
-  if (!data) return;
-  if (data.open) openRoomGame(data.game, true);
-  else closeRoomGame(true);
-});
-
-// Bridge messages coming from whichever game iframe is currently loaded on the TV screen
-window.addEventListener("message", (ev) => {
-  const data = ev && ev.data;
-  if (!data) return;
-
-  if (data.type === "FOODWHEEL_CLOSE") {
-    // The in-game ✕ button now behaves exactly like the overlay's own close button.
-    closeRoomGame();
-  }
-
-  if (data.type === "FOODWHEEL_READY") {
-    // Hand the player's real wallet balance to the game on load
-    $("room-tv-frame").contentWindow.postMessage({ type: "FOODWHEEL_INIT", balance: me.coins || 0 }, "*");
-  }
-
-  if (data.type === "FOODWHEEL_BALANCE") {
-    // Game balance changed (bet placed or win) — debounce a sync to the server
-    // so the real wallet stays authoritative.
-    if (roomTvSyncTimer) clearTimeout(roomTvSyncTimer);
-    roomTvSyncTimer = setTimeout(() => {
-      socket.emit("game-wheel-sync", { roomId: currentRoomId, balance: Math.max(0, Math.floor(data.balance)), game: "Food Wheel" });
-    }, 600);
-  }
-
-  if (data.type === "TEENPATTI_READY") {
-    // Same bridge as Food Wheel: hand the player's real wallet balance to
-    // Teen Patti on load so it always starts with the same coins as the ID.
-    $("room-tv-frame").contentWindow.postMessage({ type: "TEENPATTI_INIT", balance: me.coins || 0 }, "*");
-  }
-
-  if (data.type === "TEENPATTI_BALANCE") {
-    // Table wallet changed (bet placed or win) — debounce a sync to the
-    // server so the real wallet stays authoritative, same as Food Wheel.
-    if (roomTvSyncTimer) clearTimeout(roomTvSyncTimer);
-    roomTvSyncTimer = setTimeout(() => {
-      socket.emit("game-wheel-sync", { roomId: currentRoomId, balance: Math.max(0, Math.floor(data.balance)), game: "Teen Patti" });
-    }, 600);
-  }
-
-  if (data.type === "FOODWHEEL_BUY_COINS") {
-    // The in-game "+" button opens the real wallet instead of granting free coins
-    openWallet();
-  }
-});
-
-socket.on("game-wheel-sync-result", (data) => {
-  if (typeof data.coins === "number") {
-    me.coins = data.coins;
-    saveSession();
-    fillHomeProfile();
-  }
+$("btn-close-dice").addEventListener("click", () => $("modal-dice").classList.add("hidden"));
+$("btn-dice-play").addEventListener("click", () => {
+  const stake = Number($("dice-stake").value);
+  if (!stake || stake <= 0) { toast("সঠিক বাজি দাও"); return; }
+  socket.emit("game-dice-play", { roomId: currentRoomId, stake, guess: dicePick });
 });
 
 // ===========================================================================
@@ -1568,15 +1265,6 @@ $("btn-mod-remove-admin").addEventListener("click", () => {
   socket.emit("set-admin", { roomId: currentRoomId, targetUserId, isAdmin: false });
   toast("Admin বাদ দেওয়া হয়েছে");
 });
-$("mod-logo-input").addEventListener("change", async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const fd = new FormData();
-  fd.append("logo", file);
-  const r = await apiUpload("/api/room/logo/upload", fd);
-  if (r.success) socket.emit("update-room-logo", { roomId: currentRoomId, url: r.url });
-  else toast(r.message || "আপলোড ব্যর্থ হয়েছে");
-});
 $("mod-bg-input").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -1594,7 +1282,6 @@ $("btn-mod-close-room").addEventListener("click", () => {
   if (!confirm("এই room বন্ধ করবে? সবাই বের হয়ে যাবে।")) return;
   socket.emit("close-room", { roomId: currentRoomId });
   $("modal-room-mod").classList.add("hidden");
-  closeRoomGame();
   currentRoomId = null; currentRoom = null;
   showView("view-home"); loadRoomList();
 });
