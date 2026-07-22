@@ -1,0 +1,51 @@
+{
+  "SVIP1": {
+    "tag": "/svip-tags/svip1.png",
+    "badge": "svip1-badge",
+    "bubble": "svip1-bubble",
+    "frame": "svip1-frame",
+    "tagVersion": 1784758344998
+  },
+  "SVIP2": {
+    "bubble": "svip2-bubble",
+    "frame": "svip2-frame",
+    "tag": "/svip-tags/svip2.png",
+    "tagVersion": 1784758354839
+  },
+  "SVIP3": {
+    "roomCard": "svip3-room-card",
+    "nicknameColor": "#E5B84B",
+    "tag": "/svip-tags/svip3.png",
+    "tagVersion": 1784757633026
+  },
+  "SVIP4": {
+    "roomCard": "svip4-room-card",
+    "nicknameColor": "#E5B84B",
+    "tag": "/svip-tags/svip4.png",
+    "tagVersion": 1784757928693
+  },
+  "SVIP5": {
+    "entryEffect": "svip5-entry",
+    "tag": "/svip-tags/svip5.png",
+    "tagVersion": 1784757952896
+  },
+  "SVIP6": {
+    "entryEffect": "svip6-entry",
+    "nicknameColor": "#FF7A45",
+    "tag": "/svip-tags/svip6.png",
+    "tagVersion": 1784757976965
+  },
+  "SVIP7": {
+    "animatedRoomTheme": "svip7-theme",
+    "entryEffect": "svip7-entry",
+    "tag": "/svip-tags/svip7.png",
+    "tagVersion": 1784758012038
+  },
+  "SVIP8": {
+    "animatedRoomTheme": "svip8-theme",
+    "entryEffect": "svip8-entry",
+    "exclusiveGift": "svip8-exclusive-gift",
+    "tag": "/svip-tags/svip8.png",
+    "tagVersion": 1784758029263
+  }
+}

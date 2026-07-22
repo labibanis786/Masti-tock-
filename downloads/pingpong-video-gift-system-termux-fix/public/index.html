@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>PingPong — Voice Rooms</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700;9..144,900&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="toast" class="toast" role="alert" aria-live="assertive"></div>
+<div id="announce-banner" class="announce-banner hidden"></div>
+<div id="legend-gift-overlay" class="legend-gift-overlay hidden">
+  <div class="legend-burst-rays"></div>
+  <div id="legend-gift-emoji" class="legend-gift-emoji"></div>
+  <div id="legend-gift-text" class="legend-gift-text"></div>
+</div>
+
+<!-- ============ LOGIN ============ -->
+<section id="view-login" class="view active">
+  <div class="auth-wrap">
+    <div class="brand">
+      <div class="brand-mark">PP</div>
+      <h1>PingPong</h1>
+      <p class="brand-sub">তোমার কণ্ঠ, তোমার স্টেজ।</p>
+    </div>
+    <!-- Password login (mobile number + permanent password) — sits above the
+         OTP login below. Uses the same OTP flow one time to verify number
+         ownership before a password can be created. -->
+    <div id="step-password-login" class="auth-card">
+      <label class="field-label" for="pw-login-mobile">মোবাইল নম্বর</label>
+      <div class="field-row">
+        <span class="prefix">+91</span>
+        <input id="pw-login-mobile" type="tel" inputmode="numeric" maxlength="10" placeholder="10 digit number">
+      </div>
+      <label class="field-label" for="pw-login-password">পাসওয়ার্ড</label>
+      <input id="pw-login-password" type="password" placeholder="পাসওয়ার্ড দাও" class="field-solo">
+      <button id="btn-password-login" class="btn btn-primary btn-block">পাসওয়ার্ড দিয়ে লগইন</button>
+      <div class="auth-switch-row">
+        <button id="btn-goto-create-password" class="link-btn" type="button">পাসওয়ার্ড নেই? তৈরি করো</button>
+        <button id="btn-goto-otp-login" class="link-btn" type="button">OTP দিয়ে লগইন করো</button>
+      </div>
+    </div>
+
+    <div id="step-create-password" class="auth-card hidden">
+      <label class="field-label" for="cp-mobile">মোবাইল নম্বর</label>
+      <div class="field-row">
+        <span class="prefix">+91</span>
+        <input id="cp-mobile" type="tel" inputmode="numeric" maxlength="10" placeholder="10 digit number">
+      </div>
+      <label class="field-label" for="cp-password">নতুন পাসওয়ার্ড</label>
+      <input id="cp-password" type="password" placeholder="কমপক্ষে ৪ অক্ষর" class="field-solo">
+      <button id="btn-create-password" class="btn btn-primary btn-block">পাসওয়ার্ড তৈরি করো</button>
+      <button id="btn-back-password-login" class="btn btn-ghost btn-block">ফিরে যাও</button>
+    </div>
+
+    <div id="step-mobile" class="auth-card hidden">
+      <label class="field-label" for="mobile-input">মোবাইল নম্বর</label>
+      <div class="field-row">
+        <span class="prefix">+91</span>
+        <input id="mobile-input" type="tel" inputmode="numeric" maxlength="10" placeholder="10 digit number">
+      </div>
+      <button id="btn-send-otp" class="btn btn-primary btn-block">OTP পাঠাও</button>
+      <div class="auth-switch-row">
+        <button id="btn-goto-password-login" class="link-btn" type="button">পাসওয়ার্ড দিয়ে লগইন করো</button>
+      </div>
+    </div>
+    <div id="step-otp" class="auth-card hidden">
+      <p class="hint">Termux কনসোলে OTP দেখো। মোবাইল: <span id="otp-mobile-display"></span></p>
+      <label class="field-label" for="otp-input">OTP কোড</label>
+      <input id="otp-input" type="tel" inputmode="numeric" maxlength="6" placeholder="6 digit OTP" class="field-solo">
+      <button id="btn-verify-otp" class="btn btn-primary btn-block">Verify &amp; Login</button>
+      <button id="btn-back-mobile" class="btn btn-ghost btn-block">নম্বর পরিবর্তন করো</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ HOME ============ -->
+<section id="view-home" class="view">
+  <header class="topbar">
+    <div class="profile-chip" id="home-profile-chip">
+      <div class="avatar-frame-wrap avatar-frame-sm" id="home-avatar-frame">
+        <img id="home-avatar" class="avatar avatar-sm" src="" alt="">
+      </div>
+      <div class="profile-chip-info">
+        <span id="home-username" class="name"></span>
+        <span id="home-vip-badge" class="vip-badge vip-0">VIP 0</span>
+        <span id="home-tag-badge" class="tag-badge hidden"></span>
+      </div>
+    </div>
+    <div class="stat-pill" title="Coins">🪙 <span id="home-coins">0</span></div>
+    <div class="stat-pill" title="Diamonds">💎 <span id="home-diamonds">0</span></div>
+  </header>
+
+  <main class="page-body">
+    <div id="home-announcements" class="mini-announce hidden"></div>
+    <div class="section-head">
+      <h2>Live Rooms</h2>
+      <button id="btn-create-room" class="btn btn-accent btn-sm">+ Room বানাও</button>
+    </div>
+    <div id="room-list" class="room-grid"></div>
+    <div id="room-empty" class="empty-state hidden">
+      <p>এখনো কোনো রুম নেই।</p>
+      <p class="empty-sub">প্রথম রুমটা তুমিই বানাও।</p>
+    </div>
+  </main>
+
+  <nav class="bottom-nav">
+    <button class="nav-btn active" data-nav="home">🏠<span>Home</span></button>
+    <button class="nav-btn" data-nav="inbox">💬<span>Inbox</span></button>
+    <button class="nav-btn" data-nav="profile">👤<span>Profile</span></button>
+  </nav>
+</section>
+
+<!-- ============ CREATE ROOM MODAL ============ -->
+<div id="modal-create-room" class="modal-overlay hidden">
+  <div class="modal-card">
+    <h3>নতুন Room তৈরি করো</h3>
+    <input id="create-room-name" type="text" placeholder="Room name" class="field-solo">
+    <div class="modal-actions">
+      <button id="btn-cancel-create-room" class="btn btn-ghost">বাতিল</button>
+      <button id="btn-confirm-create-room" class="btn btn-primary">তৈরি করো</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ VOICE ROOM ============ -->
+<section id="view-room" class="view">
+  <header class="room-topbar">
+    <button id="btn-leave-room" class="icon-btn">←</button>
+    <img id="room-logo-display" class="room-logo-display hidden" alt="">
+    <div class="room-title-block">
+      <h2 id="room-name-display">Room</h2>
+      <span id="room-host-display" class="sub"></span>
+    </div>
+    <button id="btn-room-mod" class="icon-btn hidden" title="Room settings">⚙️</button>
+    <div class="stat-pill" id="room-online-count">👥 0</div>
+  </header>
+
+  <div id="gift-banner" class="gift-banner"></div>
+
+  <div class="stage-wrap" id="stage-wrap">
+    <div class="stage-glow"></div>
+    <div id="gift-fly-layer" class="gift-fly-layer"></div>
+    <div id="video-gift-overlay" class="video-gift-overlay hidden">
+      <video id="video-gift-player" playsinline></video>
+    </div>
+    <div id="seat-grid" class="seat-grid"></div>
+    <div id="room-tv-screen" class="room-tv-screen">
+      <button id="btn-room-tv-close" class="room-tv-close">✕</button>
+      <div class="room-tv-tabs">
+        <button class="room-tv-tab active" data-game="foodwheel">🎡 Food Wheel</button>
+        <button class="room-tv-tab" data-game="teenpatti">🃏 Teen Patti</button>
+      </div>
+      <div class="room-tv-frame-wrap" id="room-tv-frame-wrap">
+        <iframe id="room-tv-frame" class="room-tv-frame" title="Room Game" src="about:blank" allow="autoplay"></iframe>
+      </div>
+    </div>
+  </div>
+
+  <!-- Treasure Chest -->
+  <div id="chest-wrap" class="chest-wrap">
+    <button id="btn-chest-info" class="chest-info-btn" title="Chest levels">ⓘ</button>
+    <div id="chest-box" class="chest-box">
+      <div class="chest-glow-ring"></div>
+      <div class="chest-body">
+        <img class="chest-img" src="/images/chest-box.png" alt="Treasure Chest">
+        <div class="chest-flash"></div>
+      </div>
+      <div class="chest-sparkle s1"></div>
+      <div class="chest-sparkle s2"></div>
+      <div class="chest-sparkle s3"></div>
+    </div>
+    <div class="chest-level-tag">LV.<span id="chest-level">1</span></div>
+    <div class="chest-progress-track">
+      <div id="chest-progress-fill" class="chest-progress-fill"></div>
+    </div>
+    <div class="chest-progress-label"><span id="chest-contributed">0</span> / <span id="chest-target">100000</span> 💎</div>
+    <div class="chest-countdown">Reset: <span id="chest-countdown">--:--:--</span></div>
+  </div>
+
+  <div class="chat-panel">
+    <div id="chat-log" class="chat-log"></div>
+  </div>
+
+  <div class="room-toolbar">
+    <button id="btn-mic-toggle" class="tool-btn" title="Mic">🎤</button>
+    <button id="btn-open-gift" class="tool-btn" title="Gift">🎁</button>
+    <button id="btn-open-music" class="tool-btn" title="Music">🎵</button>
+    <button id="btn-toggle-game" class="tool-btn game-tool-btn hidden" title="Game">🎮<span class="new-badge">NEW</span></button>
+    <input id="chat-input" type="text" placeholder="মেসেজ লেখো..." class="chat-input">
+    <button id="btn-send-chat" class="tool-btn tool-btn-accent" title="Send">➤</button>
+  </div>
+</section>
+
+<!-- ============ GIFT MODAL ============ -->
+<div id="modal-gift" class="modal-overlay hidden">
+  <div class="modal-card gift-modal-card">
+    <div class="gift-modal-head">
+      <h3>Gift পাঠাও</h3>
+      <div class="gift-wallet-pill">🪙 <span id="gift-modal-coins">0</span></div>
+    </div>
+    <p class="hint">কাকে পাঠাবে বেছে নাও:</p>
+    <select id="gift-target-select" class="field-solo"></select>
+    <div id="gift-tabs" class="gift-tabs">
+      <button class="gift-tab active" data-tier="normal">Normal</button>
+      <button class="gift-tab" data-tier="vip">VIP</button>
+      <button class="gift-tab" data-tier="legend">Legend</button>
+      <button class="gift-tab" data-tier="custom">Custom</button>
+    </div>
+    <div id="gift-preview" class="gift-preview hidden">
+      <span id="gift-preview-emoji" class="gift-preview-emoji"></span>
+      <div class="gift-preview-info">
+        <span id="gift-preview-name"></span>
+        <span id="gift-preview-price"></span>
+      </div>
+    </div>
+    <div id="gift-catalog" class="gift-grid"></div>
+    <div class="modal-actions">
+      <button id="btn-close-gift" class="btn btn-ghost btn-block">বন্ধ করো</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MUSIC MODAL ============ -->
+<div id="modal-music" class="modal-overlay hidden">
+  <div class="modal-card">
+    <h3>Room Music</h3>
+    <div id="music-now-playing" class="hint">কোনো গান চলছে না</div>
+    <input id="music-file-input" type="file" accept="audio/*" class="field-solo">
+    <div class="modal-actions">
+      <button id="btn-music-playpause" class="btn btn-primary">Play / Pause</button>
+      <button id="btn-close-music" class="btn btn-ghost">বন্ধ করো</button>
+    </div>
+    <audio id="room-audio" preload="none"></audio>
+  </div>
+</div>
+
+<!-- ============ CHEST INFO MODAL ============ -->
+<div id="modal-chest-info" class="modal-overlay hidden">
+  <div class="modal-card">
+    <h3>🎁 Treasure Chest</h3>
+    <p class="hint">রুমে গিফট পাঠালে সেটার ডায়মন্ড-মূল্য চেস্টে জমা হয়। লেভেল পূরণ হলে চেস্ট খুলবে এবং Room Owner + Top 3 Gifter রিওয়ার্ড পাবে।</p>
+    <div id="chest-level-list" class="user-list"></div>
+    <button id="btn-close-chest-info" class="btn btn-ghost btn-block">বন্ধ করো</button>
+  </div>
+</div>
+
+<!-- ============ CHEST REWARD POPUP ============ -->
+<div id="modal-chest-reward" class="modal-overlay hidden">
+  <div class="modal-card chest-reward-card">
+    <div class="chest-reward-burst"></div>
+    <h3>🎉 Chest Opened — Level <span id="chest-reward-level">1</span>!</h3>
+    <div id="chest-reward-visual-wrap" class="chest-reward-visual-wrap">
+      <img id="chest-reward-mystery-img" class="chest-reward-mystery-img" src="/images/chest-mystery.png" alt="?">
+      <div id="chest-reward-card-visual" class="chest-reward-visual hidden">🎁</div>
+    </div>
+    <div id="chest-reward-amount" class="chest-reward-amount">+0 🪙</div>
+    <div id="chest-reward-top" class="chest-reward-top"></div>
+    <button id="btn-close-chest-reward" class="btn btn-primary btn-block">দারুণ!</button>
+  </div>
+</div>
+
+
+<!-- ============ ROOM MODERATION MODAL ============ -->
+<div id="modal-room-mod" class="modal-overlay hidden">
+  <div class="modal-card">
+    <h3>Room Settings</h3>
+
+    <div class="mod-section">
+      <p class="field-label">Seat Lock (1-8)</p>
+      <div class="dice-pick-row" id="seat-lock-row"></div>
+    </div>
+
+    <div class="mod-section">
+      <p class="field-label">Kick User</p>
+      <select id="mod-kick-select" class="field-solo"></select>
+      <button id="btn-mod-kick" class="btn btn-accent btn-block">Kick করো</button>
+    </div>
+
+    <div class="mod-section">
+      <p class="field-label">Room Admin বানাও/বাদ দাও (শুধু Owner)</p>
+      <select id="mod-admin-select" class="field-solo"></select>
+      <div class="modal-actions">
+        <button id="btn-mod-make-admin" class="btn btn-primary">Admin বানাও</button>
+        <button id="btn-mod-remove-admin" class="btn btn-ghost">Admin বাদ দাও</button>
+      </div>
+    </div>
+
+    <div class="mod-section">
+      <p class="field-label">Room Logo</p>
+      <input id="mod-logo-input" type="file" accept="image/*" class="field-solo">
+    </div>
+
+    <div class="mod-section">
+      <p class="field-label">Room Background</p>
+      <input id="mod-bg-input" type="file" accept="image/*" class="field-solo">
+    </div>
+
+    <div class="mod-section">
+      <button id="btn-mod-clear-chat" class="btn btn-ghost btn-block">Chat Clear করো</button>
+      <button id="btn-mod-close-room" class="btn btn-accent btn-block">Room বন্ধ করো (Owner only)</button>
+    </div>
+
+    <button id="btn-close-mod" class="btn btn-ghost btn-block">বন্ধ করো</button>
+  </div>
+</div>
+
+<!-- ============ PROFILE ============ -->
+<section id="view-profile" class="view">
+  <header class="topbar"><h2>Me</h2></header>
+  <main class="page-body">
+    <div class="profile-card-row">
+      <div class="avatar-upload-wrap avatar-frame-wrap avatar-frame-lg" id="profile-avatar-frame">
+        <img id="profile-avatar" class="avatar avatar-lg" src="" alt="">
+        <label for="profile-photo-input" class="avatar-edit-btn">✎</label>
+        <input id="profile-photo-input" type="file" accept="image/*" class="hidden">
+      </div>
+      <div class="profile-card-info">
+        <span id="profile-name-display" class="profile-display-name"></span>
+        <span class="profile-edit-hint">প্রোফাইল দেখো / এডিট করো ›</span>
+      </div>
+    </div>
+
+    <div class="id-row">
+      <span>ID: <span id="profile-userid"></span></span>
+      <button id="btn-copy-id" class="copy-btn" title="Copy ID">⧉</button>
+    </div>
+
+    <div class="badge-row">
+      <span class="chip-badge chip-level" id="profile-level-chip">Lv.1</span>
+      <span id="profile-vip-badge" class="vip-badge vip-0">VIP 0</span>
+      <span id="profile-tag-badge" class="tag-badge hidden"></span>
+    </div>
+
+    <div class="stats-plain-row">
+      <div class="stats-plain-col"><span id="profile-followers" class="stats-plain-num">0</span><span class="stats-plain-label">Followers</span></div>
+      <div class="stats-plain-col"><span id="profile-following" class="stats-plain-num">0</span><span class="stats-plain-label">Following</span></div>
+      <div class="stats-plain-col"><span id="profile-visitors" class="stats-plain-num">0</span><span class="stats-plain-label">Visitors</span></div>
+    </div>
+
+    <div class="follow-tap-row">
+      <button class="link-btn" data-follow-list="followers">Followers দেখো</button>
+      <button class="link-btn" data-follow-list="following">Following দেখো</button>
+    </div>
+
+    <div class="menu-list">
+      <button id="menu-wallet" class="menu-row">
+        <span class="menu-row-icon">💰</span>
+        <span class="menu-row-label">Wallet</span>
+        <span class="menu-row-value">🪙 <span id="menu-wallet-coins">0</span> · 💎 <span id="menu-wallet-diamonds">0</span></span>
+        <span class="menu-row-arrow">›</span>
+      </button>
+      <button id="menu-treasure" class="menu-row">
+        <span class="menu-row-icon">🎁</span>
+        <span class="menu-row-label">Treasure Box</span>
+        <span class="menu-row-arrow">›</span>
+      </button>
+      <button id="menu-frames" class="menu-row">
+        <span class="menu-row-icon">🖼️</span>
+        <span class="menu-row-label">Frames</span>
+        <span class="menu-row-arrow">›</span>
+      </button>
+      <button id="menu-agency" class="menu-row hidden">
+        <span class="menu-row-icon">🏢</span>
+        <span class="menu-row-label">Agency Center</span>
+        <span class="menu-row-arrow">›</span>
+      </button>
+      <button id="menu-edit-profile" class="menu-row">
+        <span class="menu-row-icon">✏️</span>
+        <span class="menu-row-label">Profile Edit করো</span>
+        <span class="menu-row-arrow">›</span>
+      </button>
+    </div>
+
+    <div id="profile-edit-panel" class="auth-card hidden">
+      <label class="field-label">নাম</label>
+      <input id="profile-name-input" type="text" class="field-solo" placeholder="তোমার নাম">
+      <label class="field-label">Bio</label>
+      <textarea id="profile-bio-input" placeholder="Bio লেখো..." class="field-solo"></textarea>
+      <button id="btn-save-profile" class="btn btn-primary btn-block">Save করো</button>
+    </div>
+  </main>
+  <nav class="bottom-nav">
+    <button class="nav-btn" data-nav="home">🏠<span>Home</span></button>
+    <button class="nav-btn" data-nav="inbox">💬<span>Inbox</span></button>
+    <button class="nav-btn active" data-nav="profile">👤<span>Profile</span></button>
+  </nav>
+</section>
+
+<!-- ============ WALLET ============ -->
+<section id="view-wallet" class="view">
+  <header class="topbar">
+    <button class="icon-btn" data-back="view-profile">←</button>
+    <h2>Wallet</h2>
+  </header>
+  <main class="page-body">
+    <div class="stat-row">
+      <div class="stat-box"><span id="wallet-coins" class="stat-num">0</span><span class="stat-label">Coins</span></div>
+      <div class="stat-box"><span id="wallet-diamonds" class="stat-num">0</span><span class="stat-label">Diamonds</span></div>
+    </div>
+
+    <div class="section-head"><h2>Diamond → Coin Exchange</h2></div>
+    <div class="auth-card">
+      <label class="field-label">কত Diamond exchange করবে</label>
+      <input id="exchange-amount" type="number" min="1" class="field-solo">
+      <textarea id="exchange-note" placeholder="নোট (ঐচ্ছিক)" class="field-solo"></textarea>
+      <button id="btn-request-exchange" class="btn btn-primary btn-block">Request পাঠাও</button>
+      <p class="hint">Admin approve করলেই কার্যকর হবে।</p>
+    </div>
+
+    <div class="section-head"><h2>Exchange History</h2></div>
+    <div id="exchange-history" class="user-list"></div>
+
+    <div class="section-head"><h2>Transaction History</h2></div>
+    <div id="wallet-transactions" class="user-list"></div>
+  </main>
+</section>
+
+<!-- ============ TREASURE BOX ============ -->
+<section id="view-treasure" class="view">
+  <header class="topbar">
+    <button class="icon-btn" data-back="view-profile">←</button>
+    <h2>Treasure Box</h2>
+  </header>
+  <main class="page-body">
+    <div class="treasure-card">
+      <div class="treasure-icon">🎁</div>
+      <h3>Daily Lucky Box</h3>
+      <p class="hint">প্রতিদিন একবার খুলতে পারবে</p>
+      <button id="btn-claim-daily" class="btn btn-primary btn-block">খোলো</button>
+    </div>
+    <div class="treasure-card">
+      <div class="treasure-icon">🏆</div>
+      <h3>Weekly Reward</h3>
+      <p class="hint">প্রতি সপ্তাহে একবার</p>
+      <button id="btn-claim-weekly" class="btn btn-accent btn-block">খোলো</button>
+    </div>
+  </main>
+</section>
+
+<!-- ============ FRAMES ============ -->
+<section id="view-frames" class="view">
+  <header class="topbar">
+    <button class="icon-btn" data-back="view-profile">←</button>
+    <h2>Frames</h2>
+  </header>
+  <main class="page-body">
+    <p class="hint">Admin তোমাকে frame পাঠালে সেটা এখানে active হিসেবে দেখাবে। নিচে সব catalog frame দেখা যাচ্ছে।</p>
+    <div id="active-frame-box" class="auth-card"></div>
+    <div class="section-head"><h2>Catalog</h2></div>
+    <div id="frame-catalog-list" class="gift-grid"></div>
+  </main>
+</section>
+
+<!-- ============ AGENCY CENTER ============ -->
+<section id="view-agency" class="view">
+  <header class="topbar">
+    <button class="icon-btn" data-back="view-profile">←</button>
+    <h2>Agency Center</h2>
+  </header>
+  <main class="page-body" id="agency-body"></main>
+</section>
+
+<!-- ============ FOLLOW LIST ============ -->
+<section id="view-follow-list" class="view">
+  <header class="topbar">
+    <button id="btn-back-follow-list" class="icon-btn">←</button>
+    <h2 id="follow-list-title">Followers</h2>
+  </header>
+  <main class="page-body">
+    <div id="follow-list-items" class="user-list"></div>
+    <div id="follow-list-empty" class="empty-state hidden"><p>কেউ নেই এখনো।</p></div>
+  </main>
+</section>
+
+<!-- ============ OTHER USER PROFILE ============ -->
+<section id="view-other-profile" class="view">
+  <header class="topbar">
+    <button id="btn-back-other-profile" class="icon-btn">←</button>
+    <h2>Profile</h2>
+  </header>
+  <main class="page-body">
+    <div class="profile-hero">
+      <div class="avatar-frame-wrap avatar-frame-lg" id="other-avatar-frame">
+        <img id="other-avatar" class="avatar avatar-lg" src="" alt="">
+      </div>
+      <span id="other-vip-badge" class="vip-badge vip-0">VIP 0</span>
+      <span id="other-tag-badge" class="tag-badge hidden"></span>
+      <h3 id="other-name"></h3>
+      <div class="id-tag">ID: <span id="other-userid"></span></div>
+      <div class="modal-actions">
+        <button id="btn-follow-toggle" class="btn btn-primary">Follow</button>
+        <button id="btn-message-user" class="btn btn-accent">Message</button>
+      </div>
+    </div>
+    <div class="stat-row">
+      <div class="stat-box"><span id="other-followers" class="stat-num">0</span><span class="stat-label">Followers</span></div>
+      <div class="stat-box"><span id="other-following" class="stat-num">0</span><span class="stat-label">Following</span></div>
+      <div class="stat-box"><span id="other-level" class="stat-num">1</span><span class="stat-label">Level</span></div>
+    </div>
+  </main>
+</section>
+
+<!-- ============ INBOX ============ -->
+<section id="view-inbox" class="view">
+  <header class="topbar"><h2>Inbox</h2></header>
+  <main class="page-body">
+    <div id="inbox-list" class="user-list"></div>
+    <div id="inbox-empty" class="empty-state hidden"><p>কোনো মেসেজ নেই।</p></div>
+  </main>
+  <nav class="bottom-nav">
+    <button class="nav-btn" data-nav="home">🏠<span>Home</span></button>
+    <button class="nav-btn active" data-nav="inbox">💬<span>Inbox</span></button>
+    <button class="nav-btn" data-nav="profile">👤<span>Profile</span></button>
+  </nav>
+</section>
+
+<!-- ============ MESSAGE THREAD ============ -->
+<section id="view-thread" class="view">
+  <header class="topbar">
+    <button id="btn-back-thread" class="icon-btn">←</button>
+    <h2 id="thread-title">Chat</h2>
+  </header>
+  <div id="thread-log" class="chat-log thread-log"></div>
+  <div class="room-toolbar">
+    <input id="thread-input" type="text" placeholder="মেসেজ লেখো..." class="chat-input">
+    <button id="btn-thread-send" class="tool-btn tool-btn-accent">➤</button>
+  </div>
+</section>
+
+
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

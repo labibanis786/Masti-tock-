@@ -1,0 +1,125 @@
+{
+  "systemBalance": 5000000000000,
+  "log": [
+    {
+      "type": "balance_set",
+      "adminUsername": "admin",
+      "prevBalance": 100000000,
+      "newBalance": 10000000,
+      "time": "2026-07-22T22:02:20.003Z"
+    },
+    {
+      "id": "cc_1784758734674_y59994",
+      "requestId": "aa11d8bb-4668-4b70-9597-07c7dbc5daa3",
+      "targetUserId": "69750389",
+      "targetName": "User_69750389",
+      "amount": 5000,
+      "reason": "Recharge",
+      "adminUsername": "admin",
+      "systemBalanceAfter": 9995000,
+      "time": "2026-07-22T22:18:54.674Z"
+    },
+    {
+      "id": "cc_1784758813509_yhs57g",
+      "requestId": "44f5172c-fca5-410e-99fd-e6970aa0560b",
+      "targetUserId": "69750389",
+      "targetName": "User_69750389",
+      "amount": 100000,
+      "reason": "Recharge",
+      "adminUsername": "admin",
+      "systemBalanceAfter": 9895000,
+      "time": "2026-07-22T22:20:13.509Z"
+    },
+    {
+      "id": "cc_1784759078082_9s3qt2",
+      "requestId": "146f6868-09cf-4277-be57-0f59526897a7",
+      "targetUserId": "69750389",
+      "targetName": "User_69750389",
+      "amount": 9895000,
+      "reason": "Recharge",
+      "adminUsername": "admin",
+      "systemBalanceAfter": 0,
+      "time": "2026-07-22T22:24:38.082Z"
+    },
+    {
+      "type": "balance_set",
+      "adminUsername": "admin",
+      "prevBalance": 0,
+      "newBalance": 5000000000000,
+      "time": "2026-07-22T22:24:44.286Z"
+    }
+  ],
+  "processedRequests": {
+    "864184db-d0ee-47ae-99f2-c6b3f0e0de31": {
+      "result": {
+        "success": false,
+        "message": "System balance অপর্যাপ্ত"
+      },
+      "time": "2026-07-22T22:18:46.220Z"
+    },
+    "aa11d8bb-4668-4b70-9597-07c7dbc5daa3": {
+      "result": {
+        "success": true,
+        "coins": 100005000,
+        "systemBalance": 9995000,
+        "entry": {
+          "id": "cc_1784758734674_y59994",
+          "requestId": "aa11d8bb-4668-4b70-9597-07c7dbc5daa3",
+          "targetUserId": "69750389",
+          "targetName": "User_69750389",
+          "amount": 5000,
+          "reason": "Recharge",
+          "adminUsername": "admin",
+          "systemBalanceAfter": 9995000,
+          "time": "2026-07-22T22:18:54.674Z"
+        }
+      },
+      "time": "2026-07-22T22:18:54.675Z"
+    },
+    "d1243732-2810-43d5-bf4e-d9b81f836fd9": {
+      "result": {
+        "success": false,
+        "message": "System balance অপর্যাপ্ত"
+      },
+      "time": "2026-07-22T22:20:08.692Z"
+    },
+    "44f5172c-fca5-410e-99fd-e6970aa0560b": {
+      "result": {
+        "success": true,
+        "coins": 100001,
+        "systemBalance": 9895000,
+        "entry": {
+          "id": "cc_1784758813509_yhs57g",
+          "requestId": "44f5172c-fca5-410e-99fd-e6970aa0560b",
+          "targetUserId": "69750389",
+          "targetName": "User_69750389",
+          "amount": 100000,
+          "reason": "Recharge",
+          "adminUsername": "admin",
+          "systemBalanceAfter": 9895000,
+          "time": "2026-07-22T22:20:13.509Z"
+        }
+      },
+      "time": "2026-07-22T22:20:13.509Z"
+    },
+    "146f6868-09cf-4277-be57-0f59526897a7": {
+      "result": {
+        "success": true,
+        "coins": 9895001,
+        "systemBalance": 0,
+        "entry": {
+          "id": "cc_1784759078082_9s3qt2",
+          "requestId": "146f6868-09cf-4277-be57-0f59526897a7",
+          "targetUserId": "69750389",
+          "targetName": "User_69750389",
+          "amount": 9895000,
+          "reason": "Recharge",
+          "adminUsername": "admin",
+          "systemBalanceAfter": 0,
+          "time": "2026-07-22T22:24:38.082Z"
+        }
+      },
+      "time": "2026-07-22T22:24:38.082Z"
+    }
+  }
+}
