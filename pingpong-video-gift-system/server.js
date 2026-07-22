@@ -205,9 +205,9 @@ const GIFT_CATALOG = [
     { id: "heart", name: "Heart", emoji: "❤️", price: 20, tier: "normal" },
     { id: "crown", name: "Crown", emoji: "👑", price: 100, tier: "vip" },
     { id: "car", name: "Sports Car", emoji: "🏎️", price: 500, tier: "vip" },
-    { id: "rocket", name: "Rocket", emoji: "🚀", price: 1000, tier: "legend" },
-    { id: "ring", name: "Diamond Ring", emoji: "💍", price: 300, tier: "vip" },
-    { id: "phoenix", name: "Legend Phoenix", emoji: "🔥", price: 2000, tier: "legend" }
+    { id: "rocket", name: "Rocket", emoji: "🚀", price: 100000000, tier: "legend" },
+    { id: "ring", name: "Diamond Ring", emoji: "💍", price: 300000, tier: "vip" },
+    { id: "phoenix", name: "Legend Phoenix", emoji: "🔥", price: 200000, tier: "legend" }
 ];
 
 function levelFromCoins(coins) {
