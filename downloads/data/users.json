@@ -1,0 +1,29 @@
+{
+  "9999999999": {
+    "userId": "30168095",
+    "name": "User_30168095",
+    "mobile": "9999999999",
+    "photo": "/photos/1784701344170-6881.jpg",
+    "followers": 0,
+    "following": 0,
+    "followersList": [],
+    "followingList": [],
+    "visitors": 0,
+    "coins": 100,
+    "diamonds": 100000,
+    "level": 1,
+    "vipLevel": 5,
+    "banned": false,
+    "verified": false,
+    "agencyId": null,
+    "isHost": true,
+    "activeFrame": null,
+    "customTag": {
+      "text": "Official",
+      "color": "#ffff00"
+    },
+    "lastDailyRewardAt": null,
+    "lastWeeklyRewardAt": null,
+    "passwordHash": "439f2d9b8496074d65c61f8042d49b99:7f2b5beaae0953ee95c330a2ac3ac3c225872b702c3fd3f87075ddb936431584cb95381fe89eab5a6a6be0fe78ce45157d2847759c793207493b9296838ab8a0"
+  }
+}
