@@ -1,0 +1,23 @@
+[
+  {
+    "userId": "93797535",
+    "currency": "coins",
+    "amount": 4900,
+    "note": "Food Wheel game",
+    "time": "2026-07-22T00:35:29.985Z"
+  },
+  {
+    "userId": "93797535",
+    "currency": "coins",
+    "amount": -4900,
+    "note": "Food Wheel game",
+    "time": "2026-07-22T00:35:31.751Z"
+  },
+  {
+    "userId": "93797535",
+    "currency": "coins",
+    "amount": 9900,
+    "note": "Teen Patti game",
+    "time": "2026-07-22T00:35:39.176Z"
+  }
+]

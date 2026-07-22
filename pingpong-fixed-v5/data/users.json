@@ -1,0 +1,25 @@
+{
+  "8520673476": {
+    "userId": "93797535",
+    "name": "User_93797535",
+    "mobile": "8520673476",
+    "photo": "",
+    "followers": 0,
+    "following": 0,
+    "followersList": [],
+    "followingList": [],
+    "visitors": 0,
+    "coins": 10000,
+    "diamonds": 100000,
+    "level": 51,
+    "vipLevel": 5,
+    "banned": false,
+    "verified": false,
+    "agencyId": null,
+    "isHost": true,
+    "activeFrame": null,
+    "lastDailyRewardAt": null,
+    "lastWeeklyRewardAt": null,
+    "passwordHash": "efb4826907a189a56cfbca59c32d7305:1bd8d957ef7e8589084ef07023c50b3e4eda98a402a425263e635f1b5f74c23c8b77bc12fe1252d1199e7898a12e55c208d81a06aedbdb62549c65870a42de8a"
+  }
+}
