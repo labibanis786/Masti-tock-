@@ -191,11 +191,11 @@ function levelFromCoins(coins) {
     return Math.max(1, Math.floor(coins / 200) + 1);
 }
 function vipLevelFromDiamonds(diamonds) {
-    if (diamonds >= 5000) return 5;
-    if (diamonds >= 2000) return 4;
-    if (diamonds >= 800) return 3;
-    if (diamonds >= 300) return 2;
-    if (diamonds >= 50) return 1;
+    if (diamonds >= 50000000000) return 5;
+    if (diamonds >= 200000000) return 4;
+    if (diamonds >= 800000000) return 3;
+    if (diamonds >= 3000000) return 2;
+    if (diamonds >= 50000) return 1;
     return 0;
 }
 

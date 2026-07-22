@@ -1,41 +1,3 @@
-rm -rf public_old
-rm -rf uploads
-rm -rf node_modules
-rm -f package.json
-rm -f package-lock.json
-rm -f README.md
-rm -f server_old.js
-rm -f pingpong-updated-realtime-fixed.zip
-exit
-cd ~
-rm -rf ./*
-ls
-exit
-ls
-cd ~
-cp /sdcard/Download/pingpong.zip .
-unzip pingpong.zip
-npm install
-node server.js
-cd ~
-cp /sdcard/Download/pingpong.zip .
-unzip pingpong.zip
-npm install
-node server.js
-ls
-cd ~
-cp /sdcard/Download/pingpong.zip .
-unzip pingpong.zip
-cd pingpong
-git init
-git add .
-git commit -m "Initial project upload"
-git branch -M main
-git remote add origin https://github.com/USERNAME/REPOSITORY.git
-git push -u origin main
-cd ~/pingpong
-git init
-git add .
 git commit -m "Final project update"
 git branch -M main
 git remote remove origin 2>/dev/null
@@ -498,3 +460,41 @@ rm pingpong-updated-9-fixed.zip
 rm -rf ~/downloads
 ls
 exit
+cd ~
+cp /sdcard/Download/pingpong-fixed.zip .
+unzip pingpong-fixed.zip
+npm install
+node server.js
+pwd
+ls
+cd ~
+cp /sdcard/Download/pingpong-fixed.zip .
+unzip pingpong-fixed.zip
+cd pingpong-fixed
+npm install
+node server.js
+ls
+git add .
+git commit -m "Upgrade v9 - final bug fixes and feature update"
+git push origin main
+ls
+nano server.js
+node server.js
+git status
+git log --oneline -1
+cd ~/pingpong-fixed
+git add .
+git commit -m "Upgrade v9 - latest production update"
+git push origin main
+git remote add origin https://github.com/ns7295754-tech/Ping-pong-voice-chat-.git
+git remote -v
+origin  https://github.com/ns7295754-tech/Ping-pong-voice-chat-.git (fetch)
+origin  https://github.com/ns7295754-tech/Ping-pong-voice-chat-.git (push)
+git log --oneline -1
+git show --stat fba4404
+git add -A
+git commit -m "PingPong Fixed - Latest Production Build"
+git push origin main
+pingpong-fixed/package.json
+pingpong-fixed/server.js
+pingpong-fixed/public/

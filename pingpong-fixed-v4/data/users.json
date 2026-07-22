@@ -1,0 +1,25 @@
+{
+  "8101221193": {
+    "userId": "43949931",
+    "name": "User_43949931",
+    "mobile": "8101221193",
+    "photo": "",
+    "followers": 0,
+    "following": 0,
+    "followersList": [],
+    "followingList": [],
+    "visitors": 0,
+    "coins": 5000,
+    "diamonds": 0,
+    "level": 26,
+    "vipLevel": 0,
+    "banned": false,
+    "verified": false,
+    "agencyId": null,
+    "isHost": true,
+    "activeFrame": null,
+    "lastDailyRewardAt": null,
+    "lastWeeklyRewardAt": null,
+    "passwordHash": "8119b9114cb334998eaa05d5dfa19b31:24e058e4c50c652af40dbcd9c0fb843e96618e973e86175da258fc2474b2a967b01a7d30ec4640dbe1782e8c52c6498025ace5eaefa17d588ce49dd622d8bc05"
+  }
+}
