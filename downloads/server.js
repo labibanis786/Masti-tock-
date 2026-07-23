@@ -1,3 +1,4 @@
+require("dotenv").config();
 const APP_NAME = "PingPong";
 
 const express = require("express");
@@ -10,10 +11,41 @@ const path = require("path");
 const multer = require("multer");
 const crypto = require("crypto");
 
+// ---------- PingPong AI Core ----------
+// Modular AI backend (chat support, monitoring, security, moderation,
+// analytics, dashboard) — lives entirely under ai/ and never touches wallet
+// logic directly. See ai/ai-config.js for how to configure/rotate the
+// Gemini API key and README.md for setup notes.
+const aiChat = require("./ai/ai-chat");
+const aiMonitor = require("./ai/ai-monitor");
+const aiSecurity = require("./ai/ai-security");
+const aiModerator = require("./ai/ai-moderator");
+const aiDashboardRouter = require("./ai/ai-dashboard");
+// SVIP Tag Management — image processing is optional at startup, so the
+// server still boots on platforms where sharp's prebuilt native binary
+// doesn't match the runtime (this was crashing on Android Termux with
+// "Could not load the sharp module using the android-arm64 runtime").
+// Preference order when actually processing an upload: sharp -> jimp ->
+// store the original PNG unresized. See saveSvipTagImage() below.
+let sharp = null;
+try {
+    sharp = require("sharp");
+} catch (err) {
+    console.warn(`⚠️  'sharp' not available (${err.message}) — SVIP tag uploads will use the jimp fallback, or store PNGs unresized if jimp isn't available either. This does not affect any other feature.`);
+}
+let jimp = null;
+if (!sharp) {
+    try {
+        jimp = require("jimp");
+    } catch (err) {
+        console.warn(`⚠️  'jimp' not available either (${err.message}) — SVIP tag PNGs will be saved without auto-resizing.`);
+    }
+}
+
 // ---------- Admin Config ----------
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
-let adminSessions = new Set();
+let adminSessions = new Map(); // token -> admin username (was a Set; .has()/.delete() behave the same, .add() became .set() at the one login call site)
 let socketsByUserId = {}; // userId -> socket.id
 let pendingDisconnects = {}; // userId -> { timer, roomId }  (reconnect grace period)
 
@@ -31,6 +63,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static("public", staticNoCacheHtml));
 app.use("/admin", express.static("admin", staticNoCacheHtml));
+app.use("/api/admin/ai", aiDashboardRouter(requireAdmin));
 
 // ---------- Folders ----------
 const DATA_FOLDER = path.join(__dirname, "data");
@@ -42,8 +75,10 @@ const FRAME_FOLDER = path.join(__dirname, "uploads/frames");
 // Video Gift System — admin-uploaded MP4 gifts + their thumbnails.
 const VIDEO_GIFT_FOLDER = path.join(__dirname, "uploads/video-gifts");
 const VIDEO_GIFT_THUMB_FOLDER = path.join(__dirname, "uploads/video-gifts-thumbs");
+// SVIP Tag Management — admin-uploaded PNG tag per SVIP level (svip1.png..svip8.png).
+const SVIP_TAG_FOLDER = path.join(__dirname, "uploads/svip-tags");
 
-[DATA_FOLDER, MUSIC_FOLDER, PHOTO_FOLDER, BG_FOLDER, FRAME_FOLDER, LOGO_FOLDER, VIDEO_GIFT_FOLDER, VIDEO_GIFT_THUMB_FOLDER].forEach((dir) => {
+[DATA_FOLDER, MUSIC_FOLDER, PHOTO_FOLDER, BG_FOLDER, FRAME_FOLDER, LOGO_FOLDER, VIDEO_GIFT_FOLDER, VIDEO_GIFT_THUMB_FOLDER, SVIP_TAG_FOLDER].forEach((dir) => {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
@@ -54,6 +89,7 @@ app.use("/frames", express.static(FRAME_FOLDER));
 app.use("/logos", express.static(LOGO_FOLDER));
 app.use("/video-gifts", express.static(VIDEO_GIFT_FOLDER));
 app.use("/video-gifts-thumbs", express.static(VIDEO_GIFT_THUMB_FOLDER));
+app.use("/svip-tags", express.static(SVIP_TAG_FOLDER));
 
 // ---------- File Upload Config ----------
 const musicStorage = multer.diskStorage({
@@ -85,6 +121,18 @@ const logoStorage = multer.diskStorage({
     filename: (req, file, cb) => cb(null, Date.now() + "-" + file.originalname)
 });
 const uploadLogo = multer({ storage: logoStorage });
+
+// SVIP Tag uploads: kept in memory (not written to disk directly) because
+// each upload is auto-resized + re-encoded with `sharp` (preserving PNG
+// transparency) before being saved as a fixed svip{level}.png filename.
+const uploadSvipTag = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB is plenty for a tag icon
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype !== "image/png") return cb(new Error("শুধু PNG ফাইল আপলোড করা যাবে"));
+        cb(null, true);
+    }
+});
 
 // Video Gift uploads: one form submits both the MP4 and its thumbnail image
 // together, so the two files need to land in two different folders based on
@@ -179,6 +227,14 @@ Object.values(users).forEach((u) => {
     if (u.customTag === undefined) u.customTag = null; // { text, color } — admin-assigned coloured tag (e.g. VIP), shown next to the username
     if (!u.lastDailyRewardAt) u.lastDailyRewardAt = null;
     if (!u.lastWeeklyRewardAt) u.lastWeeklyRewardAt = null;
+    // SVIP Privilege System (svip.js) — separate wealth-level fields, added
+    // here so existing accounts get sane defaults the same way other fields
+    // above do. See svip.js for what these mean.
+    if (typeof u.svipWealth !== "number") u.svipWealth = 0;
+    if (typeof u.svipLevel !== "number") u.svipLevel = 0;
+    if (u.svipMembershipType === undefined) u.svipMembershipType = "permanent";
+    if (u.svipExpireAt === undefined) u.svipExpireAt = null;
+    if (u.svipExpiryWarned === undefined) u.svipExpiryWarned = false;
 });
 
 function generateUniqueUserId() {
@@ -195,6 +251,10 @@ function findUserByUserId(userId) {
     if (!mobile) return null;
     return { mobile, user: users[mobile] };
 }
+
+// ---------- SVIP Privilege System (additive module, see svip.js) ----------
+const { initSvip } = require("./svip.js");
+const svip = initSvip({ DATA_FOLDER, safeRead, safeWrite, io, socketsByUserId, findUserByUserId, saveUsers, users });
 
 // ---------- Private Messages ----------
 let privateMessages = safeRead(MESSAGES_FILE, {});
@@ -354,6 +414,10 @@ function pushWalletUpdate(userId) {
     });
 }
 
+// ---------- Admin Coin Center (additive module, see coinCenter.js) ----------
+const { initCoinCenter } = require("./coinCenter.js");
+const coinCenter = initCoinCenter({ DATA_FOLDER, safeRead, safeWrite, io, socketsByUserId, findUserByUserId, saveUsers, users, logTransaction, pushWalletUpdate, levelFromCoins });
+
 app.get("/api/chest/config", (req, res) => {
     res.json({ success: true, levels: chestLevels });
 });
@@ -444,6 +508,7 @@ app.post("/api/auth/verify-otp", (req, res) => {
                 return res.json({ success: false, message: "তোমার অ্যাকাউন্ট ব্যান করা হয়েছে" });
             }
             console.log(`✅ Login: ${users[mobile].name} (ID: ${users[mobile].userId}), mobile ${mobile}`);
+            svip.onUserLoaded(users[mobile]);
             return res.json({ success: true, user: users[mobile] });
         }
         const userId = generateUniqueUserId();
@@ -471,6 +536,7 @@ app.post("/api/auth/verify-otp", (req, res) => {
             lastWeeklyRewardAt: null
         };
         users[mobile] = newUser;
+        svip.ensureUserSvipFields(newUser);
         saveUsers();
         console.log(`✅ New User Created: ${newUser.name} (ID: ${newUser.userId}), Mobile: ${mobile}`);
         res.json({ success: true, user: newUser });
@@ -520,6 +586,7 @@ app.post("/api/auth/set-password", (req, res) => {
                 activeFrame: null, customTag: null, lastDailyRewardAt: null, lastWeeklyRewardAt: null
             };
             console.log(`✅ New User Created (password signup): ${users[mobile].name} (ID: ${users[mobile].userId}), Mobile: ${mobile}`);
+            svip.ensureUserSvipFields(users[mobile]);
         }
         if (users[mobile].banned) return res.json({ success: false, message: "তোমার অ্যাকাউন্ট ব্যান করা হয়েছে" });
         if (users[mobile].passwordHash) return res.json({ success: false, message: "এই নম্বরে আগে থেকেই পাসওয়ার্ড সেট করা আছে — পাসওয়ার্ড দিয়ে লগইন করো" });
@@ -544,6 +611,7 @@ app.post("/api/auth/login-password", (req, res) => {
         if (user.banned) return res.json({ success: false, message: "তোমার অ্যাকাউন্ট ব্যান করা হয়েছে" });
         if (!verifyPassword(password, user.passwordHash)) return res.json({ success: false, message: "ভুল পাসওয়ার্ড" });
         console.log(`✅ Login (password): ${user.name} (ID: ${user.userId}), mobile ${mobile}`);
+        svip.onUserLoaded(user);
         res.json({ success: true, user: { ...user, passwordHash: undefined } });
     } catch (err) {
         console.error("login-password error:", err);
@@ -700,6 +768,15 @@ app.post("/api/gifts/send", (req, res) => {
         logTransaction(sender.userId, "coins", -gift.price, `Sent ${gift.name} to ${target.user.name}`);
         logTransaction(target.user.userId, "coins", gift.price, `Received ${gift.name} from ${sender.name}`);
         logGift({ fromUserId: sender.userId, fromName: sender.name, toUserId: target.user.userId, toName: target.user.name, gift, roomId: roomId || null, time: new Date().toISOString() });
+        svip.addWealth(sender.userId, gift.price, `gift:${gift.id}:${Date.now()}`, "gift_sent");
+        // Bug fix: this REST route only ever returned the sender's fresh coin
+        // total in the HTTP response. The recipient (and, below, any chest
+        // reward winners) never got a "wallet-update" push, so their coin
+        // balance sat stale everywhere on screen until their next manual
+        // reload — unlike the socket-based send-gift handler, which already
+        // pushes both sides in real time. Mirror that here.
+        pushWalletUpdate(sender.userId);
+        pushWalletUpdate(target.user.userId);
 
         if (roomId && rooms[roomId]) {
             const room = rooms[roomId];
@@ -709,8 +786,9 @@ app.post("/api/gifts/send", (req, res) => {
             if (opened) {
                 opened.forEach((o) => {
                     const top = topChestContributors(room.treasureChest, 3);
-                    applyChestReward(room.hostId, o.reward);
-                    top.forEach((c) => applyChestReward(c.userId, o.reward));
+                    const recipients = new Set([room.hostId, ...top.map((c) => c.userId)]);
+                    recipients.forEach((uid) => applyChestReward(uid, o.reward));
+                    recipients.forEach((uid) => pushWalletUpdate(uid));
                     io.to(roomId).emit("chest-opened", { level: o.level, reward: o.reward, topContributors: top });
                 });
             }
@@ -818,6 +896,93 @@ app.post("/api/room/logo/upload", uploadLogo.single("logo"), (req, res) => {
 // ==================================================
 // WALLET
 // ==================================================
+// ---------- SVIP Privilege System — read-only endpoints (Backend Core phase) ----------
+app.get("/api/svip/status/:userId", (req, res) => {
+    const status = svip.statusFor(req.params.userId);
+    if (!status) return res.json({ success: false, message: "ইউজার পাওয়া যায়নি" });
+    res.json({ success: true, ...status });
+});
+app.get("/api/svip/config", (req, res) => {
+    res.json({ success: true, levels: svip.getConfig().levels, resources: svip.getResourceMap() });
+});
+app.get("/api/svip/leaderboard", (req, res) => {
+    const period = ["daily", "weekly", "monthly", "all"].includes(req.query.period) ? req.query.period : "all";
+    res.json({ success: true, period, leaderboard: svip.getLeaderboard(period, 20) });
+});
+
+// ---------- SVIP Tag Management (PNG upload per level, SVIP1–8) ----------
+// Public: what the app/admin panel reads to show each level's tag image.
+app.get("/api/svip/tags", (req, res) => {
+    res.json({ success: true, tags: svip.listTags() });
+});
+
+// Admin: upload/replace the PNG tag for a given level. The file is
+// auto-resized (max 256px on the longest side, aspect ratio preserved) and
+// re-encoded through sharp's PNG output, which keeps the alpha/transparency
+// channel intact and never touches the background — sharp just decodes and
+// re-encodes the existing pixels, it doesn't flatten or recolor anything.
+// Saved as a fixed uploads/svip-tags/svip{level}.png so re-uploading always
+// replaces the previous tag; a tagVersion timestamp is stored separately
+// for cache-busting on the client.
+// Resize+save a SVIP tag PNG using whichever image engine is available.
+// Tries sharp first (best quality/speed), falls back to jimp (pure JS, no
+// native binary — works everywhere including Termux), and as a last
+// resort just stores the original PNG unresized so the feature never
+// hard-fails the request just because neither library could load.
+async function saveSvipTagImage(buffer, outPath) {
+    if (sharp) {
+        await sharp(buffer)
+            .resize({ width: 256, height: 256, fit: "inside", withoutEnlargement: true })
+            .png()
+            .toFile(outPath);
+        return "sharp";
+    }
+    if (jimp) {
+        const Jimp = jimp.Jimp || jimp; // support both jimp v0.x (default export) and v1.x (named export)
+        const image = await Jimp.read(buffer);
+        if (typeof image.scaleToFit === "function") image.scaleToFit(256, 256);
+        else if (typeof image.scaleToFit === "object" && Jimp.scaleToFit) await image.scaleToFit({ w: 256, h: 256 }); // v1.x fallback shape
+        if (typeof image.writeAsync === "function") await image.writeAsync(outPath);
+        else await image.write(outPath);
+        return "jimp";
+    }
+    fs.writeFileSync(outPath, buffer);
+    return "original-unresized";
+}
+
+app.post("/api/admin/svip-tags/:level/upload", requireAdmin, uploadSvipTag.single("tag"), async (req, res) => {
+    try {
+        const level = Number(req.params.level);
+        if (!Number.isInteger(level) || level < 1 || level > 8) {
+            return res.json({ success: false, message: "SVIP level 1 থেকে 8 এর মধ্যে হতে হবে" });
+        }
+        if (!req.file) return res.json({ success: false, message: "PNG ফাইল পাওয়া যায়নি" });
+
+        const filename = `svip${level}.png`;
+        const outPath = path.join(SVIP_TAG_FOLDER, filename);
+        const engine = await saveSvipTagImage(req.file.buffer, outPath);
+
+        const asset = svip.setTagAsset(level, `/svip-tags/${filename}`);
+        res.json({ success: true, level, tag: asset.tag, tagVersion: asset.tagVersion, resizedWith: engine });
+    } catch (err) {
+        console.error("svip tag upload error:", err);
+        res.status(500).json({ success: false, message: "ছবি প্রসেস করতে ব্যর্থ — শুধু বৈধ PNG আপলোড করো" });
+    }
+});
+
+// Admin: remove a level's tag (keeps the record clean; a later re-upload
+// simply overwrites svip{level}.png again).
+app.delete("/api/admin/svip-tags/:level", requireAdmin, (req, res) => {
+    const level = Number(req.params.level);
+    if (!Number.isInteger(level) || level < 1 || level > 8) {
+        return res.json({ success: false, message: "SVIP level 1 থেকে 8 এর মধ্যে হতে হবে" });
+    }
+    const filePath = path.join(SVIP_TAG_FOLDER, `svip${level}.png`);
+    try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch (_) {}
+    svip.clearTagAsset(level);
+    res.json({ success: true, level });
+});
+
 app.get("/api/wallet/:userId", (req, res) => {
     const found = findUserByUserId(req.params.userId);
     if (!found) return res.json({ success: false, message: "ইউজার পাওয়া যায়নি" });
@@ -1102,14 +1267,33 @@ app.get("/api/messages/inbox/:userId", (req, res) => {
         const last = msgs[msgs.length - 1];
         convos.push({ otherUserId: otherId, otherName: otherFound ? otherFound.user.name : "User", otherPhoto: otherFound ? otherFound.user.photo : "", lastMessage: last.message, time: last.time });
     });
+    // PingPong Help always appears in every user's inbox, even before the
+    // first message is ever sent. If there's no conversation yet, it's
+    // shown with the welcome text as a preview and sinks to the bottom
+    // (epoch time) rather than jumping above genuinely recent chats.
+    const aiKey = conversationKey(uid, aiChat.AI_USER_ID);
+    const aiMsgs = privateMessages[aiKey];
+    const aiLast = aiMsgs && aiMsgs.length ? aiMsgs[aiMsgs.length - 1] : null;
+    convos.push({
+        otherUserId: aiChat.AI_USER_ID, otherName: aiChat.AI_NAME, otherPhoto: "", isAi: true, verified: true,
+        lastMessage: aiLast ? aiLast.message : aiChat.welcomeMessage(),
+        time: aiLast ? aiLast.time : new Date(0).toISOString(),
+    });
     convos.sort((a, b) => new Date(b.time) - new Date(a.time));
     res.json({ success: true, conversations: convos });
 });
 app.get("/api/messages/thread/:userId1/:userId2", (req, res) => {
     const key = conversationKey(req.params.userId1, req.params.userId2);
+    // Seed the AI thread with its welcome message the first time either
+    // side opens it, so it never shows up empty.
+    if ([req.params.userId1, req.params.userId2].includes(aiChat.AI_USER_ID) && !privateMessages[key]) {
+        const otherId = req.params.userId1 === aiChat.AI_USER_ID ? req.params.userId2 : req.params.userId1;
+        privateMessages[key] = [{ from: aiChat.AI_USER_ID, to: otherId, message: aiChat.welcomeMessage(), time: new Date().toISOString(), ai: true }];
+        saveMessages();
+    }
     res.json({ success: true, messages: privateMessages[key] || [] });
 });
-app.post("/api/messages/send", (req, res) => {
+app.post("/api/messages/send", async (req, res) => {
     const { fromUserId, toUserId, message } = req.body;
     if (!message || !message.trim()) return res.json({ success: false, message: "মেসেজ লেখো" });
     const key = conversationKey(fromUserId, toUserId);
@@ -1119,6 +1303,27 @@ app.post("/api/messages/send", (req, res) => {
     saveMessages();
     const targetSocket = socketsByUserId[toUserId];
     if (targetSocket) io.to(targetSocket).emit("new-private-message", msg);
+
+    // If this message is going to PingPong Help, generate and store its
+    // reply right here so the sender gets it back in the same response —
+    // plus push it over their socket too, in case they've already
+    // navigated away from the thread by the time it lands.
+    if (toUserId === aiChat.AI_USER_ID) {
+        if (aiSecurity.isRateLimited(`ai-chat:${fromUserId}`, { windowMs: 30000, max: 10 })) {
+            const limitMsg = { from: aiChat.AI_USER_ID, to: fromUserId, message: "একটু ধীরে — কয়েক সেকেন্ড পর আবার চেষ্টা করো।", time: new Date().toISOString(), ai: true };
+            privateMessages[key].push(limitMsg);
+            saveMessages();
+            return res.json({ success: true, message: msg, aiReply: limitMsg });
+        }
+        const replyText = await aiChat.reply(fromUserId, msg.message);
+        const replyMsg = { from: aiChat.AI_USER_ID, to: fromUserId, message: replyText, time: new Date().toISOString(), ai: true };
+        privateMessages[key].push(replyMsg);
+        saveMessages();
+        const senderSocket = socketsByUserId[fromUserId];
+        if (senderSocket) io.to(senderSocket).emit("new-private-message", replyMsg);
+        return res.json({ success: true, message: msg, aiReply: replyMsg });
+    }
+
     res.json({ success: true, message: msg });
 });
 
@@ -1130,12 +1335,15 @@ function requireAdmin(req, res, next) {
     if (!token || !adminSessions.has(token)) return res.status(401).json({ success: false, message: "Unauthorized" });
     next();
 }
+function adminUsernameFromReq(req) {
+    return adminSessions.get(req.headers["x-admin-token"]) || "admin";
+}
 
 app.post("/api/admin/login", (req, res) => {
     const { username, password } = req.body;
     if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
         const token = crypto.randomBytes(24).toString("hex");
-        adminSessions.add(token);
+        adminSessions.set(token, username);
         return res.json({ success: true, token });
     }
     res.json({ success: false, message: "ভুল Username অথবা Password" });
@@ -1196,6 +1404,41 @@ app.post("/api/admin/users/:mobile/coins", requireAdmin, (req, res) => {
     pushWalletUpdate(u.userId);
     res.json({ success: true });
 });
+
+// ---------- Admin Coin Center ----------
+// A separate feature from the coin-set endpoint above: this *adds* coins
+// from a tracked system pool (rather than overwriting a user's balance),
+// always shows as "Coin Center" in the user's own transaction history
+// (never an admin username), and is idempotent via requestId.
+app.get("/api/admin/coin-center/balance", requireAdmin, (req, res) => {
+    res.json({ success: true, systemBalance: coinCenter.getSystemBalance() });
+});
+app.post("/api/admin/coin-center/balance", requireAdmin, (req, res) => {
+    const result = coinCenter.setSystemBalance(req.body.amount, adminUsernameFromReq(req));
+    res.json(result);
+});
+app.get("/api/admin/coin-center/search", requireAdmin, (req, res) => {
+    const found = coinCenter.findUserByIdOrMobile(req.query.query);
+    if (!found) return res.json({ success: false, message: "ইউজার পাওয়া যায়নি" });
+    res.json({ success: true, user: { userId: found.user.userId, name: found.user.name, mobile: found.mobile, coins: found.user.coins, photo: found.user.photo || "" } });
+});
+app.post("/api/admin/coin-center/send", requireAdmin, (req, res) => {
+    const { targetUserId, amount, reason, requestId } = req.body;
+    if (!targetUserId) return res.json({ success: false, message: "Target User ID দাও" });
+    const result = coinCenter.sendCoins({ targetUserId, amount, reason, requestId, adminUsername: adminUsernameFromReq(req) });
+    res.json(result);
+});
+app.post("/api/admin/coin-center/send-bulk", requireAdmin, (req, res) => {
+    const { targetUserIds, amount, reason, requestId } = req.body;
+    if (!Array.isArray(targetUserIds) || !targetUserIds.length) return res.json({ success: false, message: "অন্তত একজন ইউজার সিলেক্ট করো" });
+    const result = coinCenter.sendCoinsBulk({ targetUserIds, amount, reason, requestId, adminUsername: adminUsernameFromReq(req) });
+    res.json(result);
+});
+app.get("/api/admin/coin-center/log", requireAdmin, (req, res) => {
+    res.json({ success: true, log: coinCenter.getLog(100) });
+});
+
+
 app.delete("/api/admin/users/:mobile", requireAdmin, (req, res) => {
     const u = users[req.params.mobile];
     if (!u) return res.json({ success: false, message: "পাওয়া যায়নি" });
@@ -1328,6 +1571,7 @@ io.on("connection", (socket) => {
         socket.currentRoom = roomId;
         socketsByUserId[userId] = socket.id;
         socket.join(roomId);
+        if (foundForBan) svip.checkExpiry(userId);
         console.log(`🚪 join-room: user ${userId} (${userName || "?"}) joined room ${roomId} (socket ${socket.id})`);
 
         const existingIdx = room.onlineUsers.findIndex((u) => u.userId === userId);
@@ -1371,6 +1615,11 @@ io.on("connection", (socket) => {
         if (!room || !message || !message.trim() || !socket.userId) return;
         const found = findUserByUserId(socket.userId);
         if (!found) return;
+        // AI Security + Moderator: only acts on abuse patterns (message
+        // flood, repeated-character spam, link floods, duplicate spam) —
+        // normal chat is completely unaffected and nothing is logged for it.
+        if (aiSecurity.isRateLimited(`chat:${socket.userId}`, { windowMs: 10000, max: 12 })) return;
+        aiModerator.evaluate(socket.userId, message);
         const msg = { userId: found.user.userId, userName: found.user.name, customTag: found.user.customTag || null, message: message.trim().slice(0, 500), time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) };
         room.messages.push(msg);
         if (room.messages.length > 200) room.messages.shift();
@@ -1399,6 +1648,7 @@ io.on("connection", (socket) => {
         logTransaction(senderFound.user.userId, "coins", -gift.price, `Sent ${gift.name} to ${targetFound.user.name}`);
         logTransaction(targetFound.user.userId, "coins", gift.price, `Received ${gift.name} from ${senderFound.user.name}`);
         logGift({ fromUserId: senderFound.user.userId, fromName: senderFound.user.name, toUserId: targetFound.user.userId, toName: targetFound.user.name, gift, roomId, time: new Date().toISOString() });
+        svip.addWealth(senderFound.user.userId, gift.price, `gift:${gift.id}:${Date.now()}`, "gift_sent");
 
         io.to(roomId).emit("gift-received", { fromUserId: senderFound.user.userId, fromName: senderFound.user.name, toUserId: targetFound.user.userId, gift });
 
@@ -1434,6 +1684,7 @@ io.on("connection", (socket) => {
         saveUsers();
         pushWalletUpdate(senderFound.user.userId);
         logTransaction(senderFound.user.userId, "coins", -gift.price, `Sent video gift ${gift.name}${targetFound ? ` to ${targetFound.user.name}` : ""}`);
+        svip.addWealth(senderFound.user.userId, gift.price, `videogift:${gift.id}:${Date.now()}`, "video_gift_sent");
         logGift({
             fromUserId: senderFound.user.userId, fromName: senderFound.user.name,
             toUserId: targetFound ? targetFound.user.userId : null, toName: targetFound ? targetFound.user.name : null,
@@ -1447,6 +1698,22 @@ io.on("connection", (socket) => {
             toUserId: targetFound ? targetFound.user.userId : null, toName: targetFound ? targetFound.user.name : null,
             gift: { id: gift.id, name: gift.name, price: gift.price, videoUrl: gift.videoUrl, thumbnail: gift.thumbnail, duration: gift.duration }
         });
+
+        // Bug fix: video/custom gifts spent coins but, unlike the regular
+        // send-gift handler, never called contributeToChest — so this spend
+        // never "counted" toward the room's treasure chest / wealth level or
+        // the top-contributor ranking. Mirror the same logic used elsewhere.
+        const opened = contributeToChest(room, senderFound.user.userId, senderFound.user.name, gift.price);
+        io.to(roomId).emit("room-state", publicRoom(room));
+        if (opened) {
+            opened.forEach((o) => {
+                const top = topChestContributors(room.treasureChest, 3);
+                const recipients = new Set([room.hostId, ...top.map((c) => c.userId)]);
+                recipients.forEach((uid) => applyChestReward(uid, o.reward));
+                recipients.forEach((uid) => pushWalletUpdate(uid));
+                io.to(roomId).emit("chest-opened", { level: o.level, reward: o.reward, topContributors: top });
+            });
+        }
     });
 
     socket.on("music-update", ({ roomId, url, name, playing }) => {
@@ -1616,4 +1883,8 @@ http.listen(PORT, () => {
     console.log(`   Mobile app:  http://localhost:${PORT}/`);
     console.log(`   Admin panel: http://localhost:${PORT}/admin/`);
     console.log(`   Admin login: ${ADMIN_USERNAME} / ${ADMIN_PASSWORD}`);
+    aiMonitor.start(() => ({
+        onlineUsers: Object.keys(socketsByUserId).length,
+        activeRooms: Object.keys(rooms).length,
+    }));
 });

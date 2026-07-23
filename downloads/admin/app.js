@@ -107,11 +107,14 @@ document.querySelectorAll(".side-item").forEach((btn) => {
     if (section === "users") loadUsers();
     if (section === "rooms") loadRooms();
     if (section === "economy") loadEconomy();
+    if (section === "coin-center") loadCoinCenter();
     if (section === "frames") loadFrames();
     if (section === "tags") updateTagPreview();
+    if (section === "svip-tags") loadSvipTags();
     if (section === "video-gifts") loadVideoGifts();
     if (section === "agencies") loadAgencies();
     if (section === "chest") loadChestLevels();
+    if (section === "ai-core") loadAiCore();
   });
 });
 
@@ -332,6 +335,55 @@ $("btn-upload-frame").addEventListener("click", async () => {
   } else toast(r.message || "আপলোড ব্যর্থ হয়েছে", true);
 });
 
+// ===========================================================================
+// SVIP TAGS (per-level PNG, SVIP1–8)
+// ===========================================================================
+async function loadSvipTags() {
+  const r = await api("/api/svip/tags");
+  const wrap = $("svip-tags-list");
+  wrap.innerHTML = "";
+  if (!r.success) return;
+  r.tags.forEach((t) => {
+    const row = document.createElement("div");
+    row.className = "data-row";
+    const preview = t.tag
+      ? `<img src="${t.tag}?v=${t.tagVersion}" alt="SVIP${t.level}" style="width:40px;height:40px;object-fit:contain;background:repeating-conic-gradient(#00000022 0% 25%, transparent 0% 50%) 50% / 12px 12px;border-radius:6px;">`
+      : `<span class="sub">কোনো ট্যাগ নেই</span>`;
+    row.innerHTML = `
+      <div class="data-row-main" style="display:flex;align-items:center;gap:12px;">
+        ${preview}
+        <b>SVIP${t.level}</b>
+      </div>
+      <div class="form-row" style="margin:0;">
+        <input type="file" accept="image/png" class="field" id="svip-tag-file-${t.level}">
+        <button class="btn btn-primary" data-svip-upload="${t.level}">আপলোড</button>
+        ${t.tag ? `<button class="btn btn-ghost" data-svip-remove="${t.level}">সরাও</button>` : ""}
+      </div>`;
+    wrap.appendChild(row);
+  });
+
+  wrap.querySelectorAll("[data-svip-upload]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const level = btn.getAttribute("data-svip-upload");
+      const file = $(`svip-tag-file-${level}`).files[0];
+      if (!file) { toast("PNG ফাইল বেছে নাও", true); return; }
+      const fd = new FormData();
+      fd.append("tag", file);
+      const r = await apiUpload(`/api/admin/svip-tags/${level}/upload`, fd);
+      if (r.success) { toast(`SVIP${level} ট্যাগ আপলোড হয়েছে`); loadSvipTags(); }
+      else toast(r.message || "আপলোড ব্যর্থ হয়েছে", true);
+    });
+  });
+  wrap.querySelectorAll("[data-svip-remove]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const level = btn.getAttribute("data-svip-remove");
+      const r = await api(`/api/admin/svip-tags/${level}`, "DELETE");
+      if (r.success) { toast(`SVIP${level} ট্যাগ সরানো হয়েছে`); loadSvipTags(); }
+      else toast(r.message || "ব্যর্থ হয়েছে", true);
+    });
+  });
+}
+
 $("btn-send-frame").addEventListener("click", async () => {
   const targetUserId = $("frame-target").value.trim();
   const frameId = $("frame-select").value;
@@ -530,6 +582,207 @@ $("btn-save-chest-levels").addEventListener("click", async () => {
   if (r.success) { toast("Chest levels সেভ হয়েছে"); chestLevelsCache = r.levels; renderChestLevelsForm(); }
   else toast(r.message || "সমস্যা হয়েছে", true);
 });
+
+// ===========================================================================
+// COIN CENTER
+// ===========================================================================
+let ccSelectedUser = null;      // single mode
+let ccSelectedUsers = [];       // multi mode — array of {userId, name, coins}
+function ccIsMulti() { return $("cc-multi-toggle").checked; }
+
+async function loadCoinCenter() {
+  const r = await api("/api/admin/coin-center/balance");
+  $("cc-balance").textContent = r.success ? `${r.systemBalance.toLocaleString()} coins` : "—";
+
+  const logWrap = $("cc-log-list");
+  logWrap.innerHTML = "";
+  const lr = await api("/api/admin/coin-center/log");
+  if (lr.success) lr.log.forEach((entry) => {
+    if (entry.type === "balance_set") return; // balance top-ups aren't per-user transfers
+    const row = document.createElement("div");
+    row.className = "data-row";
+    row.innerHTML = `<div class="data-row-main"><b>${escapeHtml(entry.targetName || entry.targetUserId)}</b><span class="sub">+${entry.amount} coins · ${escapeHtml(entry.reason || "কোনো নোট নেই")} · by ${escapeHtml(entry.adminUsername)}</span></div><span class="sub">${new Date(entry.time).toLocaleString()}</span>`;
+    logWrap.appendChild(row);
+  });
+}
+
+$("btn-cc-set-balance").addEventListener("click", async () => {
+  const amount = $("cc-balance-input").value;
+  if (amount === "") { toast("একটা পরিমাণ দাও", true); return; }
+  const r = await api("/api/admin/coin-center/balance", "POST", { amount: Number(amount) });
+  if (r.success) { toast("System balance আপডেট হয়েছে"); $("cc-balance-input").value = ""; loadCoinCenter(); }
+  else toast(r.message || "সমস্যা হয়েছে", true);
+});
+
+$("cc-multi-toggle").addEventListener("change", () => {
+  ccSelectedUser = null;
+  ccSelectedUsers = [];
+  $("cc-user-card").style.display = "none";
+  renderCcRecipients();
+  $("btn-cc-send").disabled = true;
+  $("btn-cc-send").textContent = "Coin Center থেকে পাঠাও";
+});
+
+function renderCcRecipients() {
+  const wrap = $("cc-recipients-list");
+  if (!ccIsMulti() || !ccSelectedUsers.length) { wrap.style.display = "none"; wrap.innerHTML = ""; return; }
+  wrap.style.display = "flex";
+  wrap.innerHTML = "";
+  ccSelectedUsers.forEach((u) => {
+    const chip = document.createElement("span");
+    chip.className = "badge badge-ok";
+    chip.style.cssText = "display:inline-flex;align-items:center;gap:6px;padding:6px 10px;";
+    chip.innerHTML = `${escapeHtml(u.name)} (${escapeHtml(u.userId)}) <button style="border:none;background:none;color:inherit;cursor:pointer;font-weight:800;">✕</button>`;
+    chip.querySelector("button").addEventListener("click", () => {
+      ccSelectedUsers = ccSelectedUsers.filter((x) => x.userId !== u.userId);
+      renderCcRecipients();
+      $("btn-cc-send").disabled = ccSelectedUsers.length === 0;
+    });
+    wrap.appendChild(chip);
+  });
+  $("btn-cc-send").textContent = `${ccSelectedUsers.length} জনকে Coin Center থেকে পাঠাও`;
+}
+
+$("btn-cc-search").addEventListener("click", async () => {
+  const query = $("cc-search").value.trim();
+  if (!query) { toast("User ID অথবা Mobile Number দাও", true); return; }
+  const r = await api(`/api/admin/coin-center/search?query=${encodeURIComponent(query)}`);
+  if (!r.success) {
+    if (!ccIsMulti()) { ccSelectedUser = null; $("btn-cc-send").disabled = true; }
+    const card = $("cc-user-card");
+    card.style.display = "block";
+    card.innerHTML = `<span class="sub">${escapeHtml(r.message || "ইউজার পাওয়া যায়নি")}</span>`;
+    return;
+  }
+
+  if (ccIsMulti()) {
+    if (ccSelectedUsers.some((u) => u.userId === r.user.userId)) { toast("এই ইউজার আগেই লিস্টে আছে"); return; }
+    ccSelectedUsers.push(r.user);
+    $("cc-search").value = "";
+    $("cc-user-card").style.display = "none";
+    renderCcRecipients();
+    $("btn-cc-send").disabled = false;
+  } else {
+    ccSelectedUser = r.user;
+    const card = $("cc-user-card");
+    card.style.display = "block";
+    card.innerHTML = `<div class="data-row-main"><b>${escapeHtml(r.user.name)}</b><span class="sub">ID: ${escapeHtml(r.user.userId)} · বর্তমান কয়েন: ${r.user.coins.toLocaleString()}</span></div>`;
+    $("btn-cc-send").disabled = false;
+  }
+});
+
+$("btn-cc-send").addEventListener("click", async () => {
+  const amount = Number($("cc-amount").value);
+  const reason = $("cc-reason").value.trim();
+  if (!Number.isInteger(amount) || amount <= 0) { toast("সঠিক (পূর্ণসংখ্যা) কয়েনের পরিমাণ দাও", true); return; }
+
+  const requestId = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
+  const btn = $("btn-cc-send");
+
+  if (ccIsMulti()) {
+    if (!ccSelectedUsers.length) { toast("আগে অন্তত একজন User খুঁজে যোগ করো", true); return; }
+    if (!confirm(`${ccSelectedUsers.length} জন ইউজারকে প্রত্যেককে ${amount} coins করে পাঠাবে?`)) return;
+    btn.disabled = true;
+    try {
+      const targetUserIds = ccSelectedUsers.map((u) => u.userId);
+      const r = await api("/api/admin/coin-center/send-bulk", "POST", { targetUserIds, amount, reason, requestId });
+      if (r.success) {
+        toast(`${r.successCount} জনকে ${amount} coins করে পাঠানো হয়েছে${r.failCount ? ` (${r.failCount} জনের ক্ষেত্রে ব্যর্থ)` : ""}`);
+        $("cc-amount").value = "";
+        $("cc-reason").value = "";
+        ccSelectedUsers = [];
+        renderCcRecipients();
+        loadCoinCenter();
+      } else {
+        toast(r.message || "পাঠাতে ব্যর্থ হয়েছে", true);
+      }
+    } finally {
+      btn.disabled = ccSelectedUsers.length === 0;
+    }
+    return;
+  }
+
+  if (!ccSelectedUser) { toast("আগে একজন User খুঁজে বের করো", true); return; }
+  if (!confirm(`${ccSelectedUser.name} (${ccSelectedUser.userId})-কে ${amount} coins পাঠাবে?`)) return;
+
+  // requestId is generated once per confirmed click and the button is
+  // disabled immediately, so an accidental double-click (or a retried
+  // network request carrying the same requestId) can't credit twice —
+  // the server's idempotency cache replays the first result instead.
+  btn.disabled = true;
+  try {
+    const r = await api("/api/admin/coin-center/send", "POST", { targetUserId: ccSelectedUser.userId, amount, reason, requestId });
+    if (r.success) {
+      toast(`${amount} coins পাঠানো হয়েছে`);
+      $("cc-amount").value = "";
+      $("cc-reason").value = "";
+      ccSelectedUser.coins = r.coins;
+      $("cc-user-card").querySelector(".sub").textContent = `ID: ${ccSelectedUser.userId} · বর্তমান কয়েন: ${r.coins.toLocaleString()}`;
+      loadCoinCenter();
+    } else {
+      toast(r.message || "পাঠাতে ব্যর্থ হয়েছে", true);
+    }
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ===========================================================================
+// AI CORE
+// ===========================================================================
+let aiCoreTimer = null;
+
+function fmtUptime(sec) {
+  if (!sec) return "–";
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+async function loadAiCore() {
+  const [statusR, analyticsR, monitorR, logsR] = await Promise.all([
+    api("/api/admin/ai/status"),
+    api("/api/admin/ai/analytics"),
+    api("/api/admin/ai/monitor/history"),
+    api("/api/admin/ai/logs?limit=50"),
+  ]);
+
+  if (statusR.success) {
+    $("ai-provider").textContent = statusR.provider || "–";
+    $("ai-key-warning").classList.toggle("hidden", !!statusR.apiKeyConfigured);
+    const badge = $("ai-status-badge");
+    const label = { healthy: "Healthy", warning: "Warning", critical: "Critical" }[statusR.status] || "Unknown";
+    badge.textContent = label;
+    badge.className = "badge " + (statusR.status === "critical" ? "badge-danger" : statusR.status === "warning" ? "badge-warn" : "badge-ok");
+  }
+
+  if (analyticsR.success) {
+    $("ai-conversations").textContent = analyticsR.stats.totalAiConversations || 0;
+    $("ai-replies").textContent = analyticsR.stats.totalAiReplies || 0;
+    $("ai-flags").textContent = (analyticsR.stats.totalModerationFlags || 0) + (analyticsR.stats.totalRateLimitHits || 0);
+  }
+
+  if (monitorR.success && monitorR.history.length) {
+    const last = monitorR.history[monitorR.history.length - 1];
+    $("ai-mem").textContent = last.memoryMB ?? "–";
+    $("ai-lag").textContent = last.eventLoopLagMs ?? "–";
+    $("ai-online").textContent = last.onlineUsers ?? "–";
+    $("ai-uptime").textContent = fmtUptime(last.uptimeSec);
+  }
+
+  const rows = $("ai-log-rows");
+  rows.innerHTML = "";
+  const logs = logsR.success ? logsR.logs : [];
+  $("ai-log-empty").classList.toggle("hidden", logs.length > 0);
+  logs.forEach((l) => {
+    const tr = document.createElement("tr");
+    const time = new Date(l.time).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    tr.innerHTML = `<td>${escapeHtml(time)}</td><td>${escapeHtml(l.module || "")}</td><td>${escapeHtml(l.action || "")}</td><td>${escapeHtml(String(l.result || ""))}</td>`;
+    rows.appendChild(tr);
+  });
+
+  clearInterval(aiCoreTimer);
+  aiCoreTimer = setInterval(() => { if ($("sec-ai-core").classList.contains("active")) loadAiCore(); }, 30000);
+}
 
 // ===========================================================================
 // BOOTSTRAP

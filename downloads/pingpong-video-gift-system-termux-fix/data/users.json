@@ -1,7 +1,7 @@
 {
   "6363636363": {
     "userId": "69750389",
-    "name": "User_69750389",
+    "name": "New",
     "mobile": "6363636363",
     "photo": "/photos/1784757823892-6881.jpg",
     "followers": 0,
@@ -9,9 +9,9 @@
     "followersList": [],
     "followingList": [],
     "visitors": 0,
-    "coins": 7685001,
+    "coins": 10000,
     "diamonds": 100000,
-    "level": 38426,
+    "level": 51,
     "vipLevel": 5,
     "banned": false,
     "verified": true,
@@ -26,6 +26,7 @@
     "svipMembershipType": "permanent",
     "svipExpireAt": null,
     "svipExpiryWarned": false,
-    "passwordHash": "e8a636798f3a5af4f8bf22df3fb2864d:716f4e2ad6f42db11037a3a93f1acf8495e60e9908b46ba5fadb5e223288a9cd3983a9874586d5c5e30b14698e99746fcb95a00453ccb806f03587d4e2d326a6"
+    "passwordHash": "e8a636798f3a5af4f8bf22df3fb2864d:716f4e2ad6f42db11037a3a93f1acf8495e60e9908b46ba5fadb5e223288a9cd3983a9874586d5c5e30b14698e99746fcb95a00453ccb806f03587d4e2d326a6",
+    "bio": ""
   }
 }

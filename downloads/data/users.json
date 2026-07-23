@@ -1,15 +1,15 @@
 {
-  "9999999999": {
-    "userId": "30168095",
-    "name": "User_30168095",
-    "mobile": "9999999999",
-    "photo": "/photos/1784701344170-6881.jpg",
+  "8520673410": {
+    "userId": "34881407",
+    "name": "User_34881407",
+    "mobile": "8520673410",
+    "photo": "",
     "followers": 0,
     "following": 0,
     "followersList": [],
     "followingList": [],
     "visitors": 0,
-    "coins": 100,
+    "coins": 0,
     "diamonds": 100000,
     "level": 1,
     "vipLevel": 5,
@@ -18,12 +18,14 @@
     "agencyId": null,
     "isHost": true,
     "activeFrame": null,
-    "customTag": {
-      "text": "Official",
-      "color": "#ffff00"
-    },
+    "customTag": null,
     "lastDailyRewardAt": null,
     "lastWeeklyRewardAt": null,
-    "passwordHash": "439f2d9b8496074d65c61f8042d49b99:7f2b5beaae0953ee95c330a2ac3ac3c225872b702c3fd3f87075ddb936431584cb95381fe89eab5a6a6be0fe78ce45157d2847759c793207493b9296838ab8a0"
+    "passwordHash": "52911f4d5a7d6dfc0a5cdf90c8e0fab7:99ae675f0f96840deeacf51b021f1a1f708c632ab539cec7defc4e526e9c190d6648d87683fa0d3e497b1c1f966181abac415180aed5a77c8ef497da7609acf5",
+    "svipWealth": 0,
+    "svipLevel": 0,
+    "svipMembershipType": "permanent",
+    "svipExpireAt": null,
+    "svipExpiryWarned": false
   }
 }

@@ -1494,9 +1494,10 @@ async function openInbox() {
   conversations.forEach((c) => {
     const row = document.createElement("div");
     row.className = "user-row";
+    const badge = c.isAi ? ` <span title="Verified · Always Online" style="color:#3ba9ff;">✔️ Online</span>` : "";
     row.innerHTML = `
       <img class="avatar avatar-sm" src="${c.otherPhoto || placeholderAvatar(c.otherName)}">
-      <div class="user-row-body"><span class="name">${escapeHtml(c.otherName)}</span><span class="sub">${escapeHtml(c.lastMessage)}</span></div>
+      <div class="user-row-body"><span class="name">${escapeHtml(c.otherName)}${badge}</span><span class="sub">${escapeHtml(c.lastMessage)}</span></div>
     `;
     row.addEventListener("click", () => openThread(c.otherUserId, c.otherName));
     wrap.appendChild(row);
@@ -1778,7 +1779,7 @@ window.addEventListener("message", async (ev) => {
     if (roomTvSyncTimer) clearTimeout(roomTvSyncTimer);
     roomTvSyncTimer = setTimeout(() => {
       socket.emit("game-wheel-sync", { roomId: currentRoomId, balance: Math.max(0, Math.floor(data.balance)), game: "Food Wheel" });
-    }, 60);
+    }, 20);
   }
 
   if (data.type === "TEENPATTI_READY") {
@@ -1797,7 +1798,7 @@ window.addEventListener("message", async (ev) => {
     if (roomTvSyncTimer) clearTimeout(roomTvSyncTimer);
     roomTvSyncTimer = setTimeout(() => {
       socket.emit("game-wheel-sync", { roomId: currentRoomId, balance: Math.max(0, Math.floor(data.balance)), game: "Teen Patti" });
-    }, 60);
+    }, 20);
   }
 
   if (data.type === "FOODWHEEL_BUY_COINS") {

@@ -47,12 +47,15 @@
       <button class="side-item" data-section="users"><span class="side-ico">☰</span>Users</button>
       <button class="side-item" data-section="rooms"><span class="side-ico">▣</span>Rooms</button>
       <button class="side-item" data-section="economy"><span class="side-ico">◎</span>Economy</button>
+      <button class="side-item" data-section="coin-center"><span class="side-ico">$</span>Coin Center</button>
       <button class="side-item" data-section="frames"><span class="side-ico">▢</span>Frames</button>
       <button class="side-item" data-section="tags"><span class="side-ico">◆</span>Tags</button>
+      <button class="side-item" data-section="svip-tags"><span class="side-ico">★</span>SVIP Tags</button>
       <button class="side-item" data-section="video-gifts"><span class="side-ico">▶</span>Video Gifts</button>
       <button class="side-item" data-section="agencies"><span class="side-ico">▲</span>Agencies</button>
       <button class="side-item" data-section="announce"><span class="side-ico">◭</span>Announcements</button>
       <button class="side-item" data-section="chest"><span class="side-ico">◧</span>Treasure Chest</button>
+      <button class="side-item" data-section="ai-core"><span class="side-ico">✦</span>AI Core</button>
     </nav>
 
     <main class="main">
@@ -113,6 +116,44 @@
         <div id="gift-log-list" class="data-list"></div>
       </section>
 
+      <!-- COIN CENTER -->
+      <section id="sec-coin-center" class="sec">
+        <h2>Coin Center</h2>
+
+        <div class="panel">
+          <h3 class="sub-head" style="margin-top:0;">System Coin Balance</h3>
+          <div class="form-row">
+            <div id="cc-balance" style="font-size:22px;font-weight:700;">—</div>
+            <input id="cc-balance-input" type="number" min="0" placeholder="নতুন System Balance" class="field">
+            <button id="btn-cc-set-balance" class="btn btn-ghost">সেট করো</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3 class="sub-head" style="margin-top:0;">User খুঁজে কয়েন পাঠাও</h3>
+          <div class="form-row">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-dim);">
+              <input type="checkbox" id="cc-multi-toggle"> একসাথে একাধিক ইউজারকে পাঠাও
+            </label>
+          </div>
+          <div class="form-row" style="margin-top:8px;">
+            <input id="cc-search" type="text" placeholder="User ID অথবা Mobile Number" class="field">
+            <button id="btn-cc-search" class="btn btn-ghost">খুঁজো</button>
+          </div>
+          <div id="cc-user-card" class="data-row" style="display:none;margin-top:10px;"></div>
+          <div id="cc-recipients-list" style="display:none;margin-top:10px;flex-wrap:wrap;gap:8px;" class="form-row"></div>
+          <div class="form-row" style="margin-top:10px;">
+            <input id="cc-amount" type="number" min="1" step="1" placeholder="Coin পরিমাণ (প্রত্যেক ইউজারকে)" class="field">
+            <input id="cc-reason" type="text" placeholder="কারণ / নোট (ঐচ্ছিক)" maxlength="200" class="field">
+            <button id="btn-cc-send" class="btn btn-primary" disabled>Coin Center থেকে পাঠাও</button>
+          </div>
+          <p class="hint" style="margin-top:8px;">পাঠানো কয়েন ইউজারের Wallet History-তে পাঠানো ব্যক্তির নাম না দেখিয়ে সবসময় "Coin Center" হিসেবে দেখাবে, আর ইউজার সাথে সাথে (রিফ্রেশ ছাড়াই) ব্যালেন্স আপডেট ও একটা নোটিফিকেশন পাবে। একাধিক ইউজার মোডে প্রত্যেকে একই পরিমাণ কয়েন পাবে।</p>
+        </div>
+
+        <h3 class="sub-head">সাম্প্রতিক Coin Center লেনদেন</h3>
+        <div id="cc-log-list" class="data-list"></div>
+      </section>
+
       <!-- FRAMES -->
       <section id="sec-frames" class="sec">
         <h2>Frames</h2>
@@ -159,6 +200,13 @@
           <p class="hint" style="margin-top:8px;">এই ট্যাগটা ইউজারের নামের পাশে chat, seat, আর profile-এ ছোট রঙিন badge হিসেবে সাথে সাথে দেখা যাবে। "সরাও" চাপলে ওই User-এর বর্তমান ট্যাগ মুছে যাবে।</p>
           <div id="tag-preview" class="tag-preview-box"></div>
         </div>
+      </section>
+
+      <!-- SVIP TAGS -->
+      <section id="sec-svip-tags" class="sec">
+        <h2>SVIP Tag Management</h2>
+        <p class="hint">প্রতিটা SVIP Level (1–8)-এর জন্য একটা transparent PNG আপলোড করো। Auto-resize (max 256px, aspect ratio ঠিক থাকবে) আর transparency স্বয়ংক্রিয়ভাবে সংরক্ষিত হবে। নতুন করে আপলোড করলে আগেরটা replace হয়ে যাবে।</p>
+        <div id="svip-tags-list" class="data-list"></div>
       </section>
 
       <!-- VIDEO GIFTS -->
@@ -234,6 +282,41 @@
         <button id="btn-add-chest-level" class="btn btn-ghost" style="margin-top:10px;">+ আরেকটা Level যোগ করো</button>
         <div style="margin-top:16px;">
           <button id="btn-save-chest-levels" class="btn btn-primary">Save করো</button>
+        </div>
+      </section>
+
+      <!-- AI CORE -->
+      <section id="sec-ai-core" class="sec">
+        <h2>PingPong AI Core <span id="ai-status-badge" class="badge badge-ok">Healthy</span></h2>
+        <p class="hint" style="margin-bottom:16px;">
+          PingPong Help (support chat), server monitoring, security, moderation ও analytics — সব একসাথে এখান থেকে দেখা যাবে। ৩০ সেকেন্ড পরপর অটো-রিফ্রেশ হয়।
+        </p>
+
+        <div class="stat-grid">
+          <div class="stat-card"><span class="stat-num" id="ai-provider">–</span><span class="stat-lbl">AI Provider</span></div>
+          <div class="stat-card"><span class="stat-num" id="ai-conversations">0</span><span class="stat-lbl">AI Conversations</span></div>
+          <div class="stat-card"><span class="stat-num" id="ai-replies">0</span><span class="stat-lbl">AI Replies Sent</span></div>
+          <div class="stat-card warn"><span class="stat-num" id="ai-flags">0</span><span class="stat-lbl">Moderation Flags</span></div>
+        </div>
+
+        <div class="panel" style="margin-top:16px;">
+          <h3 class="sub-head" style="margin-top:0;">Server Health <span class="hint">(live)</span></h3>
+          <div class="stat-grid">
+            <div class="stat-card"><span class="stat-num" id="ai-mem">–</span><span class="stat-lbl">Memory (MB)</span></div>
+            <div class="stat-card"><span class="stat-num" id="ai-lag">–</span><span class="stat-lbl">Event Loop Lag (ms)</span></div>
+            <div class="stat-card"><span class="stat-num" id="ai-online">–</span><span class="stat-lbl">Online Users</span></div>
+            <div class="stat-card"><span class="stat-num" id="ai-uptime">–</span><span class="stat-lbl">Uptime</span></div>
+          </div>
+          <p id="ai-key-warning" class="hint hidden" style="color:var(--red); margin-top:10px;">⚠️ GEMINI_API_KEY .env ফাইলে সেট করা নেই — PingPong Help এখন কাজ করবে না।</p>
+        </div>
+
+        <div class="panel">
+          <h3 class="sub-head" style="margin-top:0;">Recent AI Activity Log</h3>
+          <table class="data-table">
+            <thead><tr><th>Time</th><th>Module</th><th>Action</th><th>Result</th></tr></thead>
+            <tbody id="ai-log-rows"></tbody>
+          </table>
+          <div id="ai-log-empty" class="empty-note hidden">এখনো কোনো AI অ্যাক্টিভিটি লগ হয়নি।</div>
         </div>
       </section>
 
